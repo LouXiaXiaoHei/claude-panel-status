@@ -1,0 +1,28 @@
+{
+  "name": "claude-status-chip",
+  "displayName": "Claude Status Chip",
+  "description": "Always-visible status chip inside the Claude Code panel: model, git branch (live), context usage with progress fill, reasoning effort, extended thinking, session cost — plus a gear menu with per-item toggles and transcript-only zoom. Self-heals after Claude extension auto-updates.",
+  "version": "1.0.0",
+  "publisher": "omarkara",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omarqra/claude-status-chip.git"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "statusline",
+    "status bar"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ]
+}
