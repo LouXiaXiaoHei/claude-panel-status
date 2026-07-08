@@ -1,5 +1,8 @@
 # Claude Status Chip
 
+> **Unofficial community extension** — not affiliated with or endorsed by Anthropic. It locally
+> patches the installed Claude Code extension's webview (a backup is kept; see caveats below).
+
 Adds an always-visible, colored status chip to the **Claude Code** panel's input toolbar (next to the
 `/` button):
 
