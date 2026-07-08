@@ -6,6 +6,8 @@
 Adds an always-visible, colored status chip to the **Claude Code** panel's input toolbar (next to the
 `/` button):
 
+![The status chip in the Claude Code panel: model, branch, context usage, effort and cost pills next to the input box](screenshot.png)
+
 ```
 [Fable 5] [(main)] [487k/1M (49%)] [e:xhigh] [think] [$12.35] ⚙
 ```
