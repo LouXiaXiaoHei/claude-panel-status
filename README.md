@@ -1,5 +1,9 @@
 # Claude Status Chip
 
+[![Open VSX](https://img.shields.io/open-vsx/v/omarkara/claude-status-chip?label=Open%20VSX&color=14657a)](https://open-vsx.org/extension/omarkara/claude-status-chip)
+[![Installs](https://img.shields.io/open-vsx/dt/omarkara/claude-status-chip?label=installs&color=14657a)](https://open-vsx.org/extension/omarkara/claude-status-chip)
+[![License: MIT](https://img.shields.io/badge/license-MIT-14657a)](LICENSE)
+
 > **Unofficial community extension** — not affiliated with or endorsed by Anthropic. It locally
 > patches the installed Claude Code extension's webview (a backup is kept; see caveats below).
 
@@ -32,11 +36,23 @@ then offers a one-click window reload).
 
 ## Install
 
-Extensions view → `⋯` → **Install from VSIX…**, or:
+**Marketplace: [Open VSX Registry](https://open-vsx.org/extension/omarkara/claude-status-chip)**
+
+### VSCodium, Cursor, Windsurf, Gitpod, Eclipse Theia
+
+These editors read Open VSX directly. Extensions view → search **Claude Status Chip** → Install.
+
+### Stock VS Code
+
+Stock VS Code reads Microsoft's marketplace, where this extension is not published. Grab the `.vsix`
+from Open VSX and install it manually:
 
 ```
-code --install-extension claude-status-chip-1.0.0.vsix
+curl -LO https://open-vsx.org/api/omarkara/claude-status-chip/1.0.1/file/omarkara.claude-status-chip-1.0.1.vsix
+code --install-extension omarkara.claude-status-chip-1.0.1.vsix
 ```
+
+Or: Extensions view → `⋯` → **Install from VSIX…** and pick the downloaded file.
 
 Restart VSCode once. When the notification appears, click **Reload Window**.
 
@@ -50,3 +66,20 @@ Restart VSCode once. When the notification appears, click **Reload Window**.
   takes precedence over the bundled one, so you can customize the chip without reinstalling.
 - To uninstall cleanly: uninstall this extension, then restore the `.cc-status.bak` backup (or simply
   reinstall/update the Claude Code extension).
+
+## Author
+
+**Omar Kara Mohammed** — full-stack and mobile developer, AI-native product builder. I build
+software with AI, ship it, and run the infrastructure under it.
+
+- LinkedIn: [linkedin.com/in/omarkm2021](https://www.linkedin.com/in/omarkm2021)
+- X: [@Omar449153](https://x.com/Omar449153)
+- GitHub: [github.com/omarqra](https://github.com/omarqra)
+
+Found it useful? A ⭐ on the repo or a rating on
+[Open VSX](https://open-vsx.org/extension/omarkara/claude-status-chip) helps other Claude Code users
+find it. Issues and PRs welcome.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

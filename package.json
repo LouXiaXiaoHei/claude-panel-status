@@ -5,6 +5,10 @@
   "version": "1.0.1",
   "publisher": "omarkara",
   "license": "MIT",
+  "author": {
+    "name": "Omar Kara Mohammed",
+    "url": "https://www.linkedin.com/in/omarkm2021"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/omarqra/claude-status-chip.git"
