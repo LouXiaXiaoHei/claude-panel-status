@@ -86,22 +86,36 @@ const runtime = [
   'var api=window.__ccStatus={};',
   'api.prefs=load();',
   `api.zoom=function(){var z=api.prefs.zoom;return typeof z==="number"&&z>=0.8&&z<=1.6?z:${ZOOM}};`,
+  // 获取用户自定义的 context window 大小（优先级最高）
+  'api.customCW=function(){var v=api.prefs.customCW;return typeof v==="number"&&v>0?v:0};',
   // zoom the conversation text only — not the header or the input box. The hash suffix of
   // messagesContainer_<hash> changes per build, so match on the stable semantic prefix.
   'api.applyZoom=function(){styleEl("cc-zoom").textContent=api.zoom()===1?"":"[class*=messagesContainer_]{zoom:"+api.zoom()+"}"};',
   'api.applyCss=function(){var css="";for(var i=0;i<SEGS.length;i++){var k=SEGS[i][0];if(api.prefs[k]===false)css+=".cc-status-chip [data-seg="+k+"]{display:none}"}styleEl("cc-status-style").textContent=css};',
   'api.set=function(k,v){api.prefs[k]=v;save(api.prefs);api.applyCss()};',
   'api.setZoom=function(z){api.prefs.zoom=z;save(api.prefs);api.applyZoom()};',
+  'api.setCustomCW=function(v){var n=parseInt(v,10);api.prefs.customCW=isNaN(n)||n<=0?0:n;save(api.prefs)};',
   'api.openMenu=function(ev){',
   'var old=document.getElementById("cc-status-menu");if(old){old.remove();return}',
   'var btn=ev&&ev.currentTarget;',
   'var mnu=document.createElement("div");mnu.id="cc-status-menu";',
-  'mnu.style.cssText="position:fixed;z-index:100000;min-width:200px;padding:10px;border-radius:10px;font-size:12px;direction:ltr;background:var(--vscode-editorWidget-background,#252526);color:var(--vscode-foreground,#ccc);border:1px solid var(--vscode-widget-border,#454545);box-shadow:0 6px 24px rgba(0,0,0,.4)";',
+  'mnu.style.cssText="position:fixed;z-index:100000;min-width:220px;padding:10px;border-radius:10px;font-size:12px;direction:ltr;background:var(--vscode-editorWidget-background,#252526);color:var(--vscode-foreground,#ccc);border:1px solid var(--vscode-widget-border,#454545);box-shadow:0 6px 24px rgba(0,0,0,.4)";',
   'var h=document.createElement("div");h.textContent="Status bar";h.style.cssText="font-weight:600;margin:0 6px 6px;opacity:.75;font-size:11px;text-transform:uppercase;letter-spacing:.4px";mnu.appendChild(h);',
   'SEGS.forEach(function(s){var lab=document.createElement("label");',
   'var c=document.createElement("input");c.type="checkbox";c.checked=api.prefs[s[0]]!==false;c.onchange=function(){api.set(s[0],c.checked)};lab.appendChild(c);',
   'var dot=document.createElement("span");dot.style.cssText="width:8px;height:8px;border-radius:999px;flex:none;background:"+s[2];lab.appendChild(dot);',
   'lab.appendChild(document.createTextNode(s[1]));mnu.appendChild(lab)});',
+  // Context Window 自定义输入区域
+  'var cwDiv=document.createElement("div");cwDiv.style.cssText="display:flex;align-items:center;gap:8px;margin:8px 6px 0;padding-top:10px;border-top:1px solid var(--vscode-widget-border,#454545)";',
+  'var cwLabel=document.createElement("span");cwLabel.textContent="Context Window";cwLabel.style.cssText="opacity:.75;flex:1;font-size:11px";cwDiv.appendChild(cwLabel);',
+  'var cwInput=document.createElement("input");cwInput.type="number";cwInput.min="0";cwInput.step="10000";cwInput.placeholder="auto";',
+  'cwInput.style.cssText="width:80px;padding:2px 6px;border-radius:4px;border:1px solid var(--vscode-widget-border,#454545);background:var(--vscode-input-background,#3c3c3c);color:var(--vscode-input-foreground,#ccc);font-size:11px;text-align:right;font-variant-numeric:tabular-nums";',
+  'var curCW=api.customCW();cwInput.value=curCW>0?curCW:"";',
+  'cwInput.onchange=function(){api.setCustomCW(cwInput.value)};',
+  'cwDiv.appendChild(cwInput);',
+  'var cwUnit=document.createElement("span");cwUnit.textContent="tok";cwUnit.style.cssText="opacity:.5;font-size:10px";cwDiv.appendChild(cwUnit);',
+  'mnu.appendChild(cwDiv);',
+  // Zoom 控制区域
   'var zr=document.createElement("div");zr.style.cssText="display:flex;align-items:center;gap:8px;margin:8px 6px 0;padding-top:10px;border-top:1px solid var(--vscode-widget-border,#454545)";',
   'var zl=document.createElement("span");zl.textContent="Zoom";zl.style.cssText="opacity:.75;flex:1";zr.appendChild(zl);',
   'var zv=document.createElement("span");zv.style.cssText="min-width:40px;text-align:center;font-variant-numeric:tabular-nums";',
@@ -117,7 +131,7 @@ const runtime = [
   'setTimeout(function(){function close(e2){if(!mnu.contains(e2.target)){mnu.remove();document.removeEventListener("mousedown",close)}}document.addEventListener("mousedown",close)},0);',
   '};',
   // static styles: menu rows/hover, themed checkboxes, zoom buttons, gear hover spin
-  'styleEl("cc-menu-style").textContent="#cc-status-menu label{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:5px;cursor:pointer}#cc-status-menu label:hover{background:var(--vscode-list-hoverBackground,rgba(128,128,128,.12))}#cc-status-menu input[type=checkbox]{accent-color:var(--vscode-button-background,#0e639c);margin:0}#cc-status-menu .cc-zbtn{width:24px;height:24px;cursor:pointer;border-radius:5px;border:1px solid var(--vscode-widget-border,#454545);background:var(--vscode-button-secondaryBackground,#3a3d41);color:inherit;font-size:13px;line-height:1}#cc-status-menu .cc-zbtn:hover{background:var(--vscode-button-secondaryHoverBackground,#45494e)}.cc-status-chip .cc-gear{transition:transform .15s ease,opacity .15s ease}.cc-status-chip .cc-gear:hover{opacity:1;transform:rotate(45deg)}";',
+  'styleEl("cc-menu-style").textContent="#cc-status-menu label{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:5px;cursor:pointer}#cc-status-menu label:hover{background:var(--vscode-list-hoverBackground,rgba(128,128,128,.12))}#cc-status-menu input[type=checkbox]{accent-color:var(--vscode-button-background,#0e639c);margin:0}#cc-status-menu input[type=number]{outline:none}#cc-status-menu input[type=number]:focus{border-color:var(--vscode-focusBorder,#007fd4)}#cc-status-menu .cc-zbtn{width:24px;height:24px;cursor:pointer;border-radius:5px;border:1px solid var(--vscode-widget-border,#454545);background:var(--vscode-button-secondaryBackground,#3a3d41);color:inherit;font-size:13px;line-height:1}#cc-status-menu .cc-zbtn:hover{background:var(--vscode-button-secondaryHoverBackground,#45494e)}.cc-status-chip .cc-gear{transition:transform .15s ease,opacity .15s ease}.cc-status-chip .cc-gear:hover{opacity:1;transform:rotate(45deg)}";',
   'api.applyZoom();api.applyCss();',
   '}catch(_){}})();',
 ].join("\n");
@@ -161,8 +175,9 @@ const chip = (jsx, sess) => `,(function(){` +
   `EF=(${sess}.effortLevel&&${sess}.effortLevel.value)||"",` +
   // computed signal: thinkingLevelOverride ?? connection config thinkingLevel ?? "off"
   `TH=(${sess}.thinkingLevel&&${sess}.thinkingLevel.value)||"",` +
-  // 当 API 不返回 contextWindow 时，从模型 fallback 表查找（兼容非官方 API 源）
-  `W=U.contextWindow||__lookupCW(Mv)||0,T=U.totalTokens||0,CO=U.totalCost||0,` +
+  // contextWindow 优先级：用户自定义 > API 返回 > 模型 fallback 表
+  `CW=window.__ccStatus?window.__ccStatus.customCW():0,` +
+  `W=CW||U.contextWindow||__lookupCW(Mv)||0,T=U.totalTokens||0,CO=U.totalCost||0,` +
   `P=W>0?Math.round(Math.min(T/W*100,100)):0,` +
   `F=function(n){return n>=1e6?(n/1e6).toFixed(1).replace(/\\.0$/,"")+"M":n>=1e3?Math.round(n/1e3)+"k":""+n};` +
   // "claude-opus-4-8" -> "Opus 4.8", "claude-fable-5" -> "Fable 5" (date-stamp segments dropped)
@@ -174,8 +189,8 @@ const chip = (jsx, sess) => `,(function(){` +
   `var L=[];` +
   `if(MN)L.push(["model",MN]);` +
   `if(BR)L.push(["branch","("+BR+")"]);` +
-  // window size only arrives with the first end-of-turn result event — show bare tokens until then
-  `if(W>0)L.push(["ctx",F(T)+"/"+F(W)+" ("+P+"%)"]);` +
+  // context 显示：百分比为主，hover 可看详细 token 数
+  `if(W>0)L.push(["ctx",P+"%"]);` +
   `else if(T>0)L.push(["ctx",F(T)+" tok"]);` +
   `if(Mv&&EF)L.push(["effort","e:"+EF]);` +
   `if(Mv&&TH&&TH!=="off")L.push(["think",TH==="on"?"think":"think:"+TH]);` +
@@ -190,8 +205,11 @@ const chip = (jsx, sess) => `,(function(){` +
   `var c=s[0]==="ctx"?col:s[0]==="effort"?ecol:CH[s[0]]||"var(--vscode-descriptionForeground)";` +
   `var st={color:c,background:"color-mix(in srgb, "+c+" 12%, transparent)",borderRadius:"999px",padding:"1px 7px",lineHeight:"16px"};` +
   // the context pill doubles as a progress bar: its background fills to the usage percentage
-  `if(s[0]==="ctx"&&W>0)st.background="linear-gradient(90deg, color-mix(in srgb, "+c+" 30%, transparent) "+P+"%, color-mix(in srgb, "+c+" 10%, transparent) "+P+"%)";` +
-  `return ${jsx}("span",{"data-seg":s[0],style:st,children:s[1]})});` +
+  // title 属性显示详细 token 数，鼠标悬停可查看
+  `if(s[0]==="ctx"&&W>0){st.background="linear-gradient(90deg, color-mix(in srgb, "+c+" 30%, transparent) "+P+"%, color-mix(in srgb, "+c+" 10%, transparent) "+P+"%)";s[1]+="\\u200B";}` + // ZWSP 作为 title 标记
+  `var attrs={"data-seg":s[0],style:st,children:s[1]};` +
+  `if(s[0]==="ctx"&&W>0)attrs.title=F(T)+"/"+F(W)+" ("+P+"%)";` +
+  `return ${jsx}("span",attrs)});` +
   // gear: always rendered so settings stay reachable even when every segment is hidden/empty
   `kids.push(${jsx}("button",{type:"button",className:"cc-gear",title:"Status bar settings","aria-label":"Status bar settings",` +
   `onClick:function(ev){if(window.__ccStatus)window.__ccStatus.openMenu(ev)},` +
