@@ -1,21 +1,21 @@
 {
   "name": "claude-status-chip",
   "displayName": "Claude Status Chip",
-  "description": "Always-visible status chip inside the Claude Code panel: model, git branch (live), context usage with progress fill, reasoning effort, extended thinking, session cost — plus a gear menu with per-item toggles and transcript-only zoom. Self-heals after Claude extension auto-updates.",
-  "version": "1.0.2",
-  "publisher": "omarkara",
+  "description": "Always-visible status chip inside the Claude Code panel: model, git branch (live), context usage with progress fill, reasoning effort, extended thinking, session cost — plus a gear menu with per-item toggles and transcript-only zoom. Self-heals after Claude extension auto-updates. Fork with non-official API source compatibility (context window fallback).",
+  "version": "1.1.0",
+  "publisher": "louxiaxiaohei",
   "license": "MIT",
   "author": {
-    "name": "Omar Kara Mohammed",
-    "url": "https://www.linkedin.com/in/omarkm2021"
+    "name": "Howard Stark",
+    "url": "https://github.com/LouXiaXiaoHei"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/omarqra/claude-status-chip.git"
+    "url": "https://github.com/LouXiaXiaoHei/claude-status-chip.git"
   },
-  "homepage": "https://github.com/omarqra/claude-status-chip#readme",
+  "homepage": "https://github.com/LouXiaXiaoHei/claude-status-chip#readme",
   "bugs": {
-    "url": "https://github.com/omarqra/claude-status-chip/issues"
+    "url": "https://github.com/LouXiaXiaoHei/claude-status-chip/issues"
   },
   "icon": "icon.png",
   "pricing": "Free",

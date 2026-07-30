@@ -21,6 +21,32 @@ const MARKER = "cc-status-chip";
 // (Gear-menu changes persist in the webview's localStorage and override this default.)
 const ZOOM = 1.15;
 
+// 已知模型的 context window 大小（tokens）
+// 当非官方 API 不返回 modelUsage 时，根据模型名称匹配此表作为 fallback
+const MODEL_CONTEXT_WINDOWS = {
+  // Claude 5 系列
+  "claude-fable-5": 200000,
+  "claude-mythos-5": 200000,
+  "claude-opus-5": 200000,
+  "claude-sonnet-5": 200000,
+  // Claude 4 系列
+  "claude-opus-4-8": 200000,
+  "claude-opus-4-7": 200000,
+  "claude-sonnet-4-8": 200000,
+  "claude-sonnet-4-7": 200000,
+  "claude-sonnet-4-5-20251001": 200000,
+  // Claude 3.5 系列
+  "claude-3-5-sonnet": 200000,
+  "claude-3-5-haiku": 200000,
+  // Claude 3 系列
+  "claude-3-opus": 200000,
+  "claude-3-sonnet": 200000,
+  "claude-3-haiku": 200000,
+};
+
+// 将模型表转为 JS 对象字面量字符串，用于注入到 webview
+const modelTableStr = JSON.stringify(MODEL_CONTEXT_WINDOWS);
+
 function findExtension() {
   const roots = [path.join(os.homedir(), ".vscode", "extensions")];
   const found = [];
@@ -102,6 +128,13 @@ const runtime = [
 // toggling needs no React re-render. The gear button always renders.
 // ---------------------------------------------------------------------------
 const chip = (jsx, sess) => `,(function(){` +
+  // 模型 context window fallback 表（注入到 webview 运行时）
+  // 当非官方 API 不返回 modelUsage 时，根据当前模型名称查表获取 contextWindow
+  `var __CW=${modelTableStr};` +
+  // 模糊匹配函数：支持部分模型名匹配（如 "claude-fable-5-20260731" 匹配 "claude-fable-5"）
+  `function __lookupCW(m){if(!m)return 0;if(__CW[m])return __CW[m];` +
+  `var keys=Object.keys(__CW);for(var i=0;i<keys.length;i++){if(m.indexOf(keys[i])===0)return __CW[keys[i]];}` +
+  `return 0;}` +
   // live branch detection: poll `git symbolic-ref` via the host's exec RPC and feed the
   // session's own gitBranch signal, so the chip (and session list) update on branch switch.
   // One interval per session store; the webview dies with the panel, so no cleanup needed.
@@ -128,7 +161,8 @@ const chip = (jsx, sess) => `,(function(){` +
   `EF=(${sess}.effortLevel&&${sess}.effortLevel.value)||"",` +
   // computed signal: thinkingLevelOverride ?? connection config thinkingLevel ?? "off"
   `TH=(${sess}.thinkingLevel&&${sess}.thinkingLevel.value)||"",` +
-  `W=U.contextWindow||0,T=U.totalTokens||0,CO=U.totalCost||0,` +
+  // 当 API 不返回 contextWindow 时，从模型 fallback 表查找（兼容非官方 API 源）
+  `W=U.contextWindow||__lookupCW(Mv)||0,T=U.totalTokens||0,CO=U.totalCost||0,` +
   `P=W>0?Math.round(Math.min(T/W*100,100)):0,` +
   `F=function(n){return n>=1e6?(n/1e6).toFixed(1).replace(/\\.0$/,"")+"M":n>=1e3?Math.round(n/1e3)+"k":""+n};` +
   // "claude-opus-4-8" -> "Opus 4.8", "claude-fable-5" -> "Fable 5" (date-stamp segments dropped)
