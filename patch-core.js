@@ -149,6 +149,44 @@ const chip = (jsx, sess) => `,(function(){` +
   `function __lookupCW(m){if(!m)return 0;if(__CW[m])return __CW[m];` +
   `var keys=Object.keys(__CW);for(var i=0;i<keys.length;i++){if(m.indexOf(keys[i])===0)return __CW[keys[i]];}` +
   `return 0;}` +
+  // ---- 核心：拦截 usageData.value 的 setter ----
+  // Preact signal 的 value 是通过 Object.defineProperty 定义的 getter/setter
+  // 非官方 API 在某些事件中会把 contextWindow 或 totalTokens 重置为 0
+  // 在调用原始 setter 之前修复值，这样 React 渲染时读到的就是正确的数据
+  `if(!${sess}.__ccCWFixed){` +
+  `var __sig=${sess}.usageData,__ss=${sess};` +
+  `__ss.__ccLastCW=0;__ss.__ccLastT=0;` +
+  // 获取原始 descriptor
+  `var __desc=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(__sig),"value")||Object.getOwnPropertyDescriptor(__sig,"value");` +
+  `if(__desc&&__desc.set){` +
+  `var __origSet=__desc.set;` +
+  // 重新定义 value 的 setter
+  `Object.defineProperty(__sig,"value",{` +
+  `get:__desc.get,` +
+  `set:function(v){` +
+  // ★ 在调用原始 setter 之前修复 contextWindow 和 totalTokens
+  `if(v&&typeof v==="object"){` +
+  // 修复 contextWindow
+  `var apiCW=v.contextWindow||0;` +
+  `if(apiCW>0)__ss.__ccLastCW=apiCW;` +
+  `var Mv=(__ss.currentMainLoopModel&&__ss.currentMainLoopModel.value)||"";` +
+  `var CW=window.__ccStatus?window.__ccStatus.customCW():0;` +
+  `var fixedCW=CW||__ss.__ccLastCW||__lookupCW(Mv)||200000;` +
+  `if(!v.contextWindow||v.contextWindow===0){` +
+  `v.contextWindow=fixedCW;` +
+  `}` +
+  // 修复 totalTokens：缓存上一次有效值，当新值为 0 时使用缓存
+  `var apiT=v.totalTokens||0;` +
+  `if(apiT>0)__ss.__ccLastT=apiT;` +
+  `else if(__ss.__ccLastT>0)v.totalTokens=__ss.__ccLastT;` +
+  `}` +
+  // 再调用原始 setter（此时 v 已修复，React 渲染读到的是正确值）
+  `__origSet.call(this,v);` +
+  `},` +
+  `configurable:true` +
+  `});` +
+  `}` +
+  `${sess}.__ccCWFixed=true;}` +
   // live branch detection: poll `git symbolic-ref` via the host's exec RPC and feed the
   // session's own gitBranch signal, so the chip (and session list) update on branch switch.
   // One interval per session store; the webview dies with the panel, so no cleanup needed.
@@ -159,6 +197,7 @@ const chip = (jsx, sess) => `,(function(){` +
   `if(b&&${sess}.gitBranch&&${sess}.gitBranch.value!==b)${sess}.gitBranch.value=b` +
   `}).catch(function(){})` +
   `}catch(_){}};pf();${sess}.__ccBrPoll=setInterval(pf,15000);}` +
+  // ---- React render：从 usageData 读取（已被拦截修复，contextWindow 不会为 0）----
   `var U=${sess}.usageData.value,` +
   `Mv=(${sess}.currentMainLoopModel&&${sess}.currentMainLoopModel.value)||"",` +
   // session store records the git branch (worktree branch wins for --worktree sessions)
@@ -175,9 +214,9 @@ const chip = (jsx, sess) => `,(function(){` +
   `EF=(${sess}.effortLevel&&${sess}.effortLevel.value)||"",` +
   // computed signal: thinkingLevelOverride ?? connection config thinkingLevel ?? "off"
   `TH=(${sess}.thinkingLevel&&${sess}.thinkingLevel.value)||"",` +
-  // contextWindow 优先级：用户自定义 > API 返回 > 模型 fallback 表
+  // contextWindow 优先级：用户自定义 > API 返回 > fallback 表 > 默认 200k
   `CW=window.__ccStatus?window.__ccStatus.customCW():0,` +
-  `W=CW||U.contextWindow||__lookupCW(Mv)||0,T=U.totalTokens||0,CO=U.totalCost||0;` +
+  `W=CW||U.contextWindow||__lookupCW(Mv)||200000,T=U.totalTokens||0,CO=U.totalCost||0;` +
   `var P=W>0?Math.round(Math.min(T/W*100,100)):0,` +
   `F=function(n){return n>=1e6?(n/1e6).toFixed(1).replace(/\\.0$/,"")+"M":n>=1e3?Math.round(n/1e3)+"k":""+n};` +
   // "claude-opus-4-8" -> "Opus 4.8", "claude-fable-5" -> "Fable 5" (date-stamp segments dropped)
