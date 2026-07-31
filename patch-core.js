@@ -177,8 +177,8 @@ const chip = (jsx, sess) => `,(function(){` +
   `TH=(${sess}.thinkingLevel&&${sess}.thinkingLevel.value)||"",` +
   // contextWindow 优先级：用户自定义 > API 返回 > 模型 fallback 表
   `CW=window.__ccStatus?window.__ccStatus.customCW():0,` +
-  `W=CW||U.contextWindow||__lookupCW(Mv)||0,T=U.totalTokens||0,CO=U.totalCost||0,` +
-  `P=W>0?Math.round(Math.min(T/W*100,100)):0,` +
+  `W=CW||U.contextWindow||__lookupCW(Mv)||0,T=U.totalTokens||0,CO=U.totalCost||0;` +
+  `var P=W>0?Math.round(Math.min(T/W*100,100)):0,` +
   `F=function(n){return n>=1e6?(n/1e6).toFixed(1).replace(/\\.0$/,"")+"M":n>=1e3?Math.round(n/1e3)+"k":""+n};` +
   // "claude-opus-4-8" -> "Opus 4.8", "claude-fable-5" -> "Fable 5" (date-stamp segments dropped)
   `var ps=Mv.replace(/^claude-/,"").split("-").filter(function(p){return !/^\\d{8}$/.test(p)}),MN=[],i;` +
