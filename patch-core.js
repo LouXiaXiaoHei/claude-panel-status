@@ -145,6 +145,8 @@ const chip = (jsx, sess) => `,(function(){` +
   // 模型 context window fallback 表（注入到 webview 运行时）
   // 当非官方 API 不返回 modelUsage 时，根据当前模型名称查表获取 contextWindow
   `var __CW=${modelTableStr};` +
+  // 每次渲染都绑定 session；setter 只安装一次，但调试状态需要在后续渲染中继续读取
+  `var __ss=${sess};` +
   // 模糊匹配函数：支持部分模型名匹配（如 "claude-fable-5-20260731" 匹配 "claude-fable-5"）
   `function __lookupCW(m){if(!m)return 0;if(__CW[m])return __CW[m];` +
   `var keys=Object.keys(__CW);for(var i=0;i<keys.length;i++){if(m.indexOf(keys[i])===0)return __CW[keys[i]];}` +
@@ -153,9 +155,9 @@ const chip = (jsx, sess) => `,(function(){` +
   // Preact signal 的 value 是通过 Object.defineProperty 定义的 getter/setter
   // 非官方 API 在某些事件中会把 contextWindow 或 totalTokens 重置为 0
   // 在调用原始 setter 之前修复值，这样 React 渲染时读到的就是正确的数据
-  `if(!${sess}.__ccCWFixed){` +
-  `var __sig=${sess}.usageData,__ss=${sess};` +
-  `__ss.__ccLastCW=0;__ss.__ccLastT=0;` +
+  `if(!__ss.__ccCWFixed){` +
+  `var __sig=__ss.usageData;` +
+  `__ss.__ccLastCW=0;__ss.__ccLastT=0;__ss.__ccSetCount=0;` +
   // 获取原始 descriptor
   `var __desc=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(__sig),"value")||Object.getOwnPropertyDescriptor(__sig,"value");` +
   `if(__desc&&__desc.set){` +
@@ -177,6 +179,7 @@ const chip = (jsx, sess) => `,(function(){` +
   `}` +
   // 修复 totalTokens：缓存上一次有效值，当新值为 0 时使用缓存
   `var apiT=v.totalTokens||0;` +
+  `__ss.__ccSetCount++;` +
   `if(apiT>0)__ss.__ccLastT=apiT;` +
   `else if(__ss.__ccLastT>0)v.totalTokens=__ss.__ccLastT;` +
   `}` +
@@ -186,7 +189,7 @@ const chip = (jsx, sess) => `,(function(){` +
   `configurable:true` +
   `});` +
   `}` +
-  `${sess}.__ccCWFixed=true;}` +
+  `__ss.__ccCWFixed=true;}` +
   // live branch detection: poll `git symbolic-ref` via the host's exec RPC and feed the
   // session's own gitBranch signal, so the chip (and session list) update on branch switch.
   // One interval per session store; the webview dies with the panel, so no cleanup needed.
@@ -246,7 +249,7 @@ const chip = (jsx, sess) => `,(function(){` +
   // title 属性显示详细 token 数，鼠标悬停可查看
   `if(s[0]==="ctx"&&W>0){st.background="linear-gradient(90deg, color-mix(in srgb, "+c+" 30%, transparent) "+P+"%, color-mix(in srgb, "+c+" 10%, transparent) "+P+"%)";s[1]+="\\u200B";}` + // ZWSP 作为 title 标记
   `var attrs={"data-seg":s[0],style:st,children:s[1]};` +
-  `if(s[0]==="ctx"&&W>0)attrs.title=F(T)+"/"+F(W)+" ("+P+"%)";` +
+  `if(s[0]==="ctx"&&W>0)attrs.title=F(T)+"/"+F(W)+" ("+P+"%) [set:"+(__ss.__ccSetCount||0)+"|lastT:"+(__ss.__ccLastT||0)+"]";` +
   `return ${jsx}("span",attrs)});` +
   // gear: always rendered so settings stay reachable even when every segment is hidden/empty
   `kids.push(${jsx}("button",{type:"button",className:"cc-gear",title:"Status bar settings","aria-label":"Status bar settings",` +
