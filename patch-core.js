@@ -228,9 +228,8 @@ const chip = (jsx, sess) => `,(function(){` +
   `var L=[];` +
   `if(MN)L.push(["model",MN]);` +
   `if(BR)L.push(["branch","("+BR+")"]);` +
-  // context 显示：百分比为主，hover 可看详细 token 数
-  `if(W>0)L.push(["ctx",P+"%"]);` +
-  `else if(T>0)L.push(["ctx",F(T)+" tok"]);` +
+  // 上下文使用百分比显示
+  `L.push(["ctx",P+"%"]);` +
   `if(Mv&&EF)L.push(["effort","e:"+EF]);` +
   `if(Mv&&TH&&TH!=="off")L.push(["think",TH==="on"?"think":"think:"+TH]);` +
   `if(CO>=0.005)L.push(["cost","$"+CO.toFixed(2)]);` +
