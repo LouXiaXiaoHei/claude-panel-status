@@ -1,15 +1,15 @@
-// Claude Status Chip — keeps a status-chip patch applied to the Claude Code
+// Claude Panel Status — keeps a panel-status patch applied to the Claude Code
 // VSCode extension's webview across its auto-updates.
 // The patch logic lives in patch-core.js (bundled). If the user keeps an
-// editable copy at ~/.claude/patch-claude-vscode-status.js, that one wins so
-// power users can tweak the chip without reinstalling this extension.
+// editable copy at ~/.claude/patch-claude-vscode-panel.js, that one wins so
+// power users can tweak the panel status without reinstalling this extension.
 const path = require("path");
 const os = require("os");
 const fs = require("fs");
 const vscode = require("vscode");
 
 const CANDIDATES = [
-  path.join(os.homedir(), ".claude", "patch-claude-vscode-status.js"),
+  path.join(os.homedir(), ".claude", "patch-claude-vscode-panel.js"),
   path.join(__dirname, "patch-core.js"),
 ];
 
@@ -43,9 +43,9 @@ function notifyReload(message) {
 function handle(res, { silentAlready }) {
   if (!res) return;
   if (res.status === "patched") {
-    notifyReload("Claude status chip applied. Reload the window to activate it.");
+    notifyReload("Claude panel status applied. Reload the window to activate it.");
   } else if (res.status === "anchor-missing" && !silentAlready) {
-    vscode.window.showWarningMessage("Claude status chip: patch anchor not found in this Claude extension version — the patcher needs updating.");
+    vscode.window.showWarningMessage("Claude panel status: patch anchor not found in this Claude extension version — the patcher needs updating.");
   }
 }
 
