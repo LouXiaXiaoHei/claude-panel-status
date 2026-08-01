@@ -285,7 +285,17 @@ test("stream UTF-8 fallback estimates output and a new message_start replaces it
   render(jsx, sess, browserWindow, () => 1, immediateTimeout);
   sess.processMessage({
     type: "stream_event",
-    event: { type: "message_start", message: {} },
+    event: {
+      type: "message_start",
+      message: {
+        usage: {
+          input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          output_tokens: 0,
+        },
+      },
+    },
   });
   sess.processMessage({
     type: "stream_event",

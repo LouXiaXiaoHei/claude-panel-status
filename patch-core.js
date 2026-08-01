@@ -331,8 +331,8 @@ const chip = (jsx, sess) => `,(function(){` +
   `__ss.__cpClearStreamFn(false);` +
   `var usage=inner.message&&inner.message.usage,input=usage&&__cpNum(usage.input_tokens),` +
   `created=usage&&__cpNum(usage.cache_creation_input_tokens),read=usage&&__cpNum(usage.cache_read_input_tokens),` +
-  `hasBase=input!==void 0||created!==void 0||read!==void 0;` +
-  `__ss.__cpStreamBase=hasBase?(input||0)+(created||0)+(read||0):(__ss.__cpLastT||((__ss.usageData.value||{}).totalTokens||0));` +
+  `providedBase=(input||0)+(created||0)+(read||0);` +
+  `__ss.__cpStreamBase=providedBase>0?providedBase:(__ss.__cpLastT||((__ss.usageData.value||{}).totalTokens||0));` +
   `__ss.__cpStreamBytes=0;var initialOutput=usage&&__cpNum(usage.output_tokens);` +
   `__ss.__cpStreamFloorOutput=initialOutput||0;__ss.__cpStreamOutput=void 0;__ss.__cpPublishLiveFn();` +
   `}else if(inner.type==="message_delta"){` +
