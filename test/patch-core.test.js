@@ -179,6 +179,23 @@ function makeSession() {
     processedMessages,
     processMessage(event) {
       processedMessages.push({ event, receiver: this });
+      if (event.type === "assistant" && !event.parent_tool_use_id && event.message?.usage) {
+        const usage = event.message.usage;
+        const totalTokens = (usage.input_tokens || 0)
+          + (usage.cache_creation_input_tokens || 0)
+          + (usage.cache_read_input_tokens || 0)
+          + (usage.output_tokens || 0);
+        this.usageData.value = { ...this.usageData.value, totalTokens };
+      } else if (event.type === "system" && event.subtype === "compact_boundary") {
+        this.usageData.value = { ...this.usageData.value, totalTokens: 0 };
+      } else if (event.type === "system" && event.subtype === "init" && event.session_id) {
+        this.sessionId.value = event.session_id;
+        this.usageData.value = {
+          ...this.usageData.value,
+          totalTokens: 0,
+          totalCost: 0,
+        };
+      }
       return "original-result";
     },
     sessionId: { value: "session-1" },
@@ -354,6 +371,306 @@ test("stream refresh throttle coalesces deltas within 100ms", () => {
   } finally {
     Date.now = originalNow;
   }
+});
+
+test("native assistant usage replaces live context", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.processMessage({
+    type: "stream_event",
+    event: {
+      type: "message_start",
+      message: { usage: { input_tokens: 70000, cache_read_input_tokens: 3000 } },
+    },
+  });
+  sess.processMessage({
+    type: "content_block_delta",
+    event: { type: "content_block_delta", delta: { type: "text_delta", text: "draft" } },
+  });
+  assert.equal(sess.__cpLiveActive, true);
+
+  sess.processMessage({
+    type: "assistant",
+    message: {
+      role: "assistant",
+      model: "xopglm51",
+      usage: {
+        input_tokens: 70000,
+        cache_creation_input_tokens: 1000,
+        cache_read_input_tokens: 2000,
+        output_tokens: 4500,
+      },
+      content: [],
+    },
+  });
+
+  assert.equal(sess.usageData.value.totalTokens, 77500);
+  assert.equal(sess.__cpLastT, 77500);
+  assert.equal(sess.__cpLiveActive, false);
+});
+
+test("invalid native assistant usage does not discard live context", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const immediateTimeout = (fn) => fn();
+
+  render(
+    jsx,
+    sess,
+    { __cpStatus: { customCW: () => 0 } },
+    () => 1,
+    immediateTimeout,
+  );
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "message_start", message: { usage: { input_tokens: 70000 } } },
+  });
+  sess.processMessage({
+    type: "assistant",
+    message: {
+      role: "assistant",
+      model: "xopglm51",
+      usage: { input_tokens: -1, output_tokens: 0 },
+      content: [],
+    },
+  });
+
+  assert.equal(sess.__cpLiveActive, true);
+  assert.equal(sess.__cpLiveT, 70000);
+});
+
+test("compact boundary resets live context and probes before busy completion", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  sess.usageData.current = {
+    contextWindow: 200000,
+    totalTokens: 83146,
+    totalCost: 1.25,
+    maxOutputTokens: 32000,
+    extra: "keep",
+  };
+  const calls = [];
+  sess.connection.value = {
+    exec(command, args) {
+      calls.push({ command, args });
+      return Promise.resolve({
+        stdout: command === "node"
+          ? '{"kind":"compact","totalTokens":6750}'
+          : "",
+      });
+    },
+  };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.processMessage({
+    type: "stream_event",
+    event: {
+      type: "message_start",
+      message: { usage: { input_tokens: 83146 } },
+    },
+  });
+  sess.processMessage({
+    type: "system",
+    subtype: "compact_boundary",
+    compact_metadata: { trigger: "manual", pre_tokens: 83146 },
+  });
+
+  assert.equal(sess.usageData.value.totalTokens, 0);
+  assert.equal(sess.__cpLiveActive, false);
+  assert.equal(calls.filter((call) => call.command === "node").length, 4);
+  await flushPromises();
+
+  assert.deepEqual(sess.usageData.value, {
+    contextWindow: 200000,
+    totalTokens: 6750,
+    totalCost: 1.25,
+    maxOutputTokens: 32000,
+    extra: "keep",
+  });
+  assert.equal(sess.__cpLastT, 6750);
+});
+
+test("compact boundary applies raw post_tokens without transcript", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const calls = [];
+  sess.connection.value = {
+    exec(command) {
+      calls.push(command);
+      return Promise.resolve({ stdout: "" });
+    },
+  };
+
+  render(
+    jsx,
+    sess,
+    { __cpStatus: { customCW: () => 0 } },
+    () => 1,
+    (fn) => fn(),
+  );
+  sess.processMessage({
+    type: "system",
+    subtype: "compact_boundary",
+    compact_metadata: { pre_tokens: 1000, post_tokens: 125 },
+  });
+
+  assert.equal(sess.usageData.value.totalTokens, 125);
+  assert.equal(sess.__cpLastT, 125);
+  assert.equal(calls.filter((command) => command === "node").length, 0);
+
+  sess.processMessage({
+    type: "system",
+    subtype: "compact_boundary",
+    compact_metadata: { pre_tokens: 125, post_tokens: 0 },
+  });
+  assert.equal(sess.usageData.value.totalTokens, 0);
+  assert.equal(sess.__cpLastT, 0);
+  assert.equal(calls.filter((command) => command === "node").length, 0);
+});
+
+test("reused-store init clears live and confirmed context", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const immediateTimeout = (fn) => fn();
+
+  render(
+    jsx,
+    sess,
+    { __cpStatus: { customCW: () => 0 } },
+    () => 1,
+    immediateTimeout,
+  );
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "message_start", message: { usage: { input_tokens: 70000 } } },
+  });
+  assert.equal(sess.__cpLiveActive, true);
+
+  sess.processMessage({
+    type: "system",
+    subtype: "init",
+    session_id: "session-2",
+    model: "xopglm51",
+  });
+
+  assert.equal(sess.sessionId.value, "session-2");
+  assert.equal(sess.usageData.value.totalTokens, 0);
+  assert.equal(sess.__cpLastT, 0);
+  assert.equal(sess.__cpLastCW, 0);
+  assert.equal(sess.__cpLiveT, 0);
+  assert.equal(sess.__cpLiveActive, false);
+  assert.equal(sess.__cpStreamBase, 0);
+  assert.equal(sess.__cpStreamBytes, 0);
+});
+
+test("transcript result replaces retained live context", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  sess.connection.value = {
+    exec: (command) => Promise.resolve({
+      stdout: command === "node"
+        ? '{"kind":"usage","totalTokens":80000}'
+        : "",
+    }),
+  };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "message_start", message: { usage: { input_tokens: 76000 } } },
+  });
+  sess.busy.value = false;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  await flushPromises();
+
+  assert.equal(sess.usageData.value.totalTokens, 80000);
+  assert.equal(sess.__cpLiveActive, false);
+  assert.equal(sess.__cpLiveT, 0);
+});
+
+test("busy start prevents prior transcript probes from replacing new live context", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const pending = [];
+  sess.connection.value = {
+    exec(command) {
+      if (command !== "node") return Promise.resolve({ stdout: "" });
+      return new Promise((resolve) => pending.push(resolve));
+    },
+  };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.busy.value = false;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  assert.equal(pending.length, 3);
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "message_start", message: { usage: { input_tokens: 90000 } } },
+  });
+  pending[0]({ stdout: '{"kind":"usage","totalTokens":40000}' });
+  await flushPromises();
+
+  assert.equal(sess.__cpLiveActive, true);
+  assert.equal(sess.__cpLiveT, 90000);
+  assert.equal(sess.usageData.value.totalTokens, 1000);
 });
 
 test("idle session with zero usage applies transcript fallback once", async () => {

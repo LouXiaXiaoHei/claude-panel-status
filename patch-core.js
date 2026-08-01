@@ -246,10 +246,12 @@ const chip = (jsx, sess) => `,(function(){` +
   `if(sidNow!==__ss.__cpUsageSid)__ss.__cpUsageSid=sidNow;` +
   `if(sidChanged){__ss.__cpLastT=0;__ss.__cpLastCW=0;__ss.__cpProbeGen=(__ss.__cpProbeGen||0)+1;}` +
   `var allowZero=sidChanged||__ss.__cpAllowZeroOnce===true;` +
+  `var dropCW=sidChanged||__ss.__cpDropCWOnce===true;` +
   `__ss.__cpAllowZeroOnce=false;` +
+  `__ss.__cpDropCWOnce=false;` +
   // 修复 contextWindow
   `var apiCW=v.contextWindow||0;` +
-  `if(apiCW>0)__ss.__cpLastCW=apiCW;` +
+  `if(apiCW>0&&!dropCW)__ss.__cpLastCW=apiCW;` +
   `var Mv=(__ss.currentMainLoopModel&&__ss.currentMainLoopModel.value)||"";` +
   `var CW=window.__cpStatus?window.__cpStatus.customCW():0;` +
   `var fixedCW=CW||__ss.__cpLastCW||__lookupCW(Mv)||200000;` +
@@ -273,6 +275,11 @@ const chip = (jsx, sess) => `,(function(){` +
   // Live context usage from Claude's root stream events. Estimated values stay separate from
   // confirmed usage so ordinary zero-value protection and transcript reconciliation remain exact.
   `function __cpNum(v){return typeof v==="number"&&Number.isFinite(v)&&v>=0?v:void 0}` +
+  `function __cpUsageTotal(usage){if(!usage||typeof usage!=="object")return -1;` +
+  `var fields=["input_tokens","cache_creation_input_tokens","cache_read_input_tokens","output_tokens"],total=0,found=false,i,value;` +
+  `for(i=0;i<fields.length;i++){value=usage[fields[i]];if(value===void 0||value===null)continue;` +
+  `value=__cpNum(value);if(value===void 0)return -1;total+=value;found=true}` +
+  `return found?total:-1}` +
   `function __cpUtf8Length(v){var s=typeof v==="string"?v:"",n=0,i,c,d;` +
   `for(i=0;i<s.length;i++){c=s.charCodeAt(i);` +
   `if(c<128)n+=1;else if(c<2048)n+=2;` +
@@ -302,6 +309,22 @@ const chip = (jsx, sess) => `,(function(){` +
   `if(!__ss.__cpStreamHooked&&typeof __ss.processMessage==="function"){` +
   `var __origProcessMessage=__ss.processMessage;` +
   `__ss.processMessage=function(event){` +
+  `var directCompact,originalResult;` +
+  `try{` +
+  `if(event&&event.type==="assistant"&&!event.parent_tool_use_id&&event.message&&__cpUsageTotal(event.message.usage)>0){` +
+  `__ss.__cpClearStreamFn(true);` +
+  `}else if(event&&event.type==="system"&&event.subtype==="compact_boundary"){` +
+  `__ss.__cpClearStreamFn(true);__ss.__cpLastT=0;__ss.__cpAllowZeroOnce=true;` +
+  `__ss.__cpProbeGen=(__ss.__cpProbeGen||0)+1;directCompact=__cpNum((event.compact_metadata||{}).post_tokens);` +
+  `}else if(event&&event.type==="system"&&event.subtype==="init"){` +
+  `var currentSid=(__ss.sessionId&&__ss.sessionId.value)||"",nextSid=typeof event.session_id==="string"?event.session_id:"";` +
+  `if(currentSid&&nextSid&&currentSid!==nextSid){` +
+  `__ss.__cpClearStreamFn(true);__ss.__cpLastT=0;__ss.__cpLastCW=0;` +
+  `__ss.__cpAllowZeroOnce=true;__ss.__cpDropCWOnce=true;__ss.__cpUsageSid=nextSid;` +
+  `__ss.__cpProbeGen=(__ss.__cpProbeGen||0)+1;` +
+  `}` +
+  `}` +
+  `}catch(_){}` +
   `try{if(event&&event.type==="stream_event"&&!event.parent_tool_use_id){` +
   `var inner=event.event||{};` +
   `if(inner.type==="message_start"){` +
@@ -321,7 +344,13 @@ const chip = (jsx, sess) => `,(function(){` +
   `if(__ss.__cpStreamOutput===void 0)__ss.__cpPublishLiveFn();` +
   `}` +
   `}}catch(_){}` +
-  `return __origProcessMessage.apply(this,arguments);` +
+  `originalResult=__origProcessMessage.apply(this,arguments);` +
+  `try{if(event&&event.type==="system"&&event.subtype==="compact_boundary"){` +
+  `if(directCompact!==void 0){if(directCompact===0)__ss.__cpAllowZeroOnce=true;` +
+  `var current=__ss.usageData.value||{};__ss.usageData.value=Object.assign({},current,{totalTokens:directCompact});` +
+  `}else if(typeof __ss.__cpRequestProbe==="function")__ss.__cpRequestProbe("compact");` +
+  `}}catch(_){}` +
+  `return originalResult;` +
   `};__ss.__cpStreamHooked=true;}` +
   // Reconcile usage from the session transcript once at idle startup (only when empty)
   // and after each busy -> idle transition. Generation checks discard stale RPC results.
@@ -337,20 +366,26 @@ const chip = (jsx, sess) => `,(function(){` +
   `var isUsage=data&&data.kind==="usage"&&typeof data.totalTokens==="number"&&Number.isFinite(data.totalTokens)&&data.totalTokens>0;` +
   `var isCompact=data&&data.kind==="compact"&&typeof data.totalTokens==="number"&&Number.isFinite(data.totalTokens)&&data.totalTokens>=0;` +
   `if(!isUsage&&!isCompact)return;` +
+  `if(typeof __ss.__cpClearStreamFn==="function")__ss.__cpClearStreamFn(true);` +
   `var current=__ss.usageData.value||{};` +
   `if(isCompact&&data.totalTokens===0)__ss.__cpAllowZeroOnce=true;` +
   `if(current.totalTokens!==data.totalTokens||__ss.__cpAllowZeroOnce)__ss.usageData.value=Object.assign({},current,{totalTokens:data.totalTokens});` +
   `}).catch(function(){})` +
   `}catch(_){}},delay)}` +
-  `function __scheduleProbe(){if(!__sid||!__cwd)return;` +
+  `function __scheduleProbe(sid,cwd,delays){if(!sid||!cwd)return;` +
   `var gen=(__ss.__cpProbeGen||0)+1;__ss.__cpProbeGen=gen;` +
-  `__runProbe(gen,__sid,__cwd,0);__runProbe(gen,__sid,__cwd,300);__runProbe(gen,__sid,__cwd,1000)}` +
+  `for(var di=0;di<delays.length;di++)__runProbe(gen,sid,cwd,delays[di])}` +
+  `__ss.__cpRequestProbe=function(reason){` +
+  `var sid=(__ss.sessionId&&__ss.sessionId.value)||"",cwd=(__ss.cwd&&__ss.cwd.value)||"";` +
+  `__scheduleProbe(sid,cwd,reason==="compact"?[0,100,300,700]:[0,300,1000]);` +
+  `};` +
   `if(__ss.__cpProbeSid!==__sid){` +
   `if(__ss.__cpProbeSid)__ss.__cpProbeGen=(__ss.__cpProbeGen||0)+1;` +
   `__ss.__cpProbeSid=__sid;__ss.__cpWasBusy=__busy;` +
-  `if(__sid&&!__busy&&!(__ss.__cpLastT>0))__scheduleProbe();` +
+  `if(__sid&&!__busy&&!(__ss.__cpLastT>0))__ss.__cpRequestProbe("turn");` +
   `}else{` +
-  `if(__ss.__cpWasBusy&&!__busy&&__sid)__scheduleProbe();` +
+  `if(!__ss.__cpWasBusy&&__busy)__ss.__cpProbeGen=(__ss.__cpProbeGen||0)+1;` +
+  `if(__ss.__cpWasBusy&&!__busy&&__sid)__ss.__cpRequestProbe("turn");` +
   `__ss.__cpWasBusy=__busy;` +
   `}` +
   // live branch detection: poll `git symbolic-ref` via the host's exec RPC and feed the
