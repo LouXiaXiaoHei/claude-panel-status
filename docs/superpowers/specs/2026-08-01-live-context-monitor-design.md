@@ -30,7 +30,7 @@ Use a three-level data path, in priority order:
 
 The wrapper is installed once per session store and always calls the original method exactly once. Plugin parsing is isolated by `try/catch` so it cannot interfere with Claude message processing.
 
-Live values are stored separately from confirmed usage, for example in `__ccLiveT`. They affect rendering but do not update `__ccLastT`. A lightweight signal refresh is throttled to at most once every 100ms.
+Live values are stored separately from confirmed usage, for example in `__cpLiveT`. They affect rendering but do not update `__cpLastT`. A lightweight signal refresh is throttled to at most once every 100ms.
 
 ## Streaming Usage
 
@@ -48,7 +48,7 @@ input_tokens
 
 Use its initial `output_tokens` when present. A later tool-driven model call produces a new `message_start`; its input/cache total replaces the previous base because it already represents the expanded prompt for that call.
 
-If the provider omits input usage, use the last confirmed `__ccLastT` as a fallback base. This is not exact because newly submitted user or tool content may not yet be included, but it is better than freezing the indicator.
+If the provider omits input usage, use the last confirmed `__cpLastT` as a fallback base. This is not exact because newly submitted user or tool content may not yet be included, but it is better than freezing the indicator.
 
 ### Message delta
 
@@ -76,7 +76,7 @@ This ratio is intentionally conservative across English prose, code, JSON, and C
 
 ### Rendering
 
-While live state is active, render `__ccLiveT` instead of the confirmed `usageData.totalTokens`. Keep the existing output format, percentage calculation, progress fill, and colors. Do not add an approximation symbol.
+While live state is active, render `__cpLiveT` instead of the confirmed `usageData.totalTokens`. Keep the existing output format, percentage calculation, progress fill, and colors. Do not add an approximation symbol.
 
 Context-window priority remains:
 
@@ -108,7 +108,7 @@ When `/clear` creates a new session store, all live and confirmed state initiali
 When a store is reused, intercept a `system/init` whose non-empty `session_id` differs from the tracked session before Claude processes its usage reset:
 
 - permit the legitimate zero assignment;
-- clear `__ccLastT`, `__ccLastCW`, `__ccLiveT`, and all stream counters;
+- clear `__cpLastT`, `__cpLastCW`, `__cpLiveT`, and all stream counters;
 - invalidate stream timers and transcript generations;
 - bind subsequent values to the new session ID.
 
@@ -130,7 +130,7 @@ Token display precedence is:
 
 1. active live stream value;
 2. the latest native or transcript-confirmed `usageData.totalTokens`;
-3. cached confirmed `__ccLastT` protection.
+3. cached confirmed `__cpLastT` protection.
 
 The transcript result is authoritative when it arrives and clears the corresponding live state. Compact and session changes may legitimately reduce the displayed value; ordinary same-session zero assignments still restore the last confirmed positive value.
 
@@ -152,7 +152,7 @@ Add regression coverage for:
 1. `message_start` input/cache plus cumulative `message_delta` output produces a live total.
 2. Missing usage falls back to UTF-8 byte estimation for text, thinking, and partial tool JSON.
 3. Refreshes are throttled to at most one per 100ms window.
-4. Live estimates do not update `__ccLastT`.
+4. Live estimates do not update `__cpLastT`.
 5. A later tool-call `message_start` replaces the earlier stream base.
 6. Native final assistant usage clears and replaces live state.
 7. A transcript result clears and replaces live state after the turn.
