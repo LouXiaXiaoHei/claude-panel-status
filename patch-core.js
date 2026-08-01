@@ -17,6 +17,8 @@ const path = require("path");
 const os = require("os");
 
 const MARKER = "cp-status-panel";
+// 旧版扩展的标记，用于检测和清理残留的旧版 patch
+const LEGACY_MARKER = "cc-status-chip";
 // Default transcript zoom when the user hasn't picked one from the gear menu yet. 1 = off.
 // (Gear-menu changes persist in the webview's localStorage and override this default.)
 const ZOOM = 1.15;
@@ -464,6 +466,22 @@ function run() {
   const ext = findExtension();
   if (!ext) return { status: "none", message: "cp-status: Claude Code VSCode extension not found — nothing to patch" };
   let src = fs.readFileSync(ext.file, "utf8");
+  // 检测旧版 patch 残留：如果 bundle 中有旧版标记，
+  // 说明旧版扩展曾 patch 过。从备份恢复原始文件再重新 patch。
+  const bak = ext.file + ".cp-status.bak";
+  const oldBak = ext.file + ".cc-status.bak";
+  if (src.includes(LEGACY_MARKER)) {
+    // 优先使用新版备份，其次旧版备份
+    const restoreFrom = fs.existsSync(bak) ? bak : fs.existsSync(oldBak) ? oldBak : null;
+    if (restoreFrom) {
+      const clean = fs.readFileSync(restoreFrom, "utf8");
+      // 确认备份文件干净（不含任何 patch 标记）
+      if (!clean.includes(LEGACY_MARKER) && !clean.includes(MARKER)) {
+        src = clean;
+        fs.writeFileSync(ext.file, src);
+      }
+    }
+  }
   if (src.includes(MARKER)) return { status: "already", file: ext.file, message: "cp-status: already patched — " + ext.file };
   const m = src.match(re);
   if (!m) return {
@@ -471,8 +489,6 @@ function run() {
     message: "cp-status: anchor not found in " + ext.file + " — the extension bundle changed; the patch needs updating for this version.",
   };
   // 迁移旧版备份文件
-  const oldBak = ext.file + ".cc-status.bak";
-  const bak = ext.file + ".cp-status.bak";
   if (fs.existsSync(oldBak) && !fs.existsSync(bak)) fs.renameSync(oldBak, bak);
   if (!fs.existsSync(bak)) fs.copyFileSync(ext.file, bak);
   src = src.replace(re, (whole, jsx, _comp, sess) => whole + chip(jsx, sess));
