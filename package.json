@@ -1,8 +1,8 @@
 {
-  "name": "claude-status-chip",
-  "displayName": "Claude Status Chip",
-  "description": "Always-visible status chip inside the Claude Code panel: model, git branch (live), context usage with progress fill, reasoning effort, extended thinking, session cost — plus a gear menu with per-item toggles and transcript-only zoom. Self-heals after Claude extension auto-updates. Fork with non-official API source compatibility (context window fallback).",
-  "version": "1.1.0",
+  "name": "claude-panel-status",
+  "displayName": "Claude Panel Status",
+  "description": "Always-visible panel status indicator inside the Claude Code panel: model, git branch (live), context usage with progress fill, reasoning effort, extended thinking, session cost — plus a gear menu with per-item toggles and transcript-only zoom. Self-heals after Claude extension auto-updates. Non-official API source compatibility (context window fallback).",
+  "version": "2.0.0",
   "publisher": "louxiaxiaohei",
   "license": "MIT",
   "author": {
@@ -11,11 +11,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/LouXiaXiaoHei/claude-status-chip.git"
+    "url": "https://github.com/LouXiaXiaoHei/claude-panel-status.git"
   },
-  "homepage": "https://github.com/LouXiaXiaoHei/claude-status-chip#readme",
+  "homepage": "https://github.com/LouXiaXiaoHei/claude-panel-status#readme",
   "bugs": {
-    "url": "https://github.com/LouXiaXiaoHei/claude-status-chip/issues"
+    "url": "https://github.com/LouXiaXiaoHei/claude-panel-status/issues"
   },
   "icon": "icon.png",
   "pricing": "Free",
@@ -29,7 +29,8 @@
     "claude",
     "claude-code",
     "statusline",
-    "status bar"
+    "status bar",
+    "panel"
   ],
   "main": "./extension.js",
   "activationEvents": [
