@@ -21,6 +21,45 @@ const MARKER = "cc-status-chip";
 // (Gear-menu changes persist in the webview's localStorage and override this default.)
 const ZOOM = 1.15;
 
+// Host-side script executed through the existing webview connection RPC.
+// It returns only the latest main-assistant token total, never transcript content.
+const TRANSCRIPT_PROBE = String.raw`
+;(function(){
+  try {
+    const fs = require("fs");
+    const os = require("os");
+    const path = require("path");
+    const sessionId = process.argv[1] || "";
+    const cwd = process.argv[2] || "";
+    if (!/^[A-Za-z0-9_-]+$/.test(sessionId) || !cwd) return;
+    const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+    const projectDir = cwd.replace(/[^A-Za-z0-9]/g, "-");
+    const transcript = path.join(claudeDir, "projects", projectDir, sessionId + ".jsonl");
+    const lines = fs.readFileSync(transcript, "utf8").split("\n");
+    const num = (value) => typeof value === "number" && Number.isFinite(value) ? value : 0;
+    for (let index = lines.length - 1; index >= 0; index--) {
+      if (!lines[index]) continue;
+      let entry;
+      try { entry = JSON.parse(lines[index]); } catch { continue; }
+      if (entry.type !== "assistant" || entry.isSidechain) continue;
+      const message = entry.message;
+      if (!message || message.role !== "assistant" || message.model === "<synthetic>" || !message.usage) continue;
+      const usage = message.usage;
+      const totalTokens = num(usage.input_tokens)
+        + num(usage.cache_creation_input_tokens)
+        + num(usage.cache_read_input_tokens)
+        + num(usage.output_tokens);
+      if (totalTokens > 0) {
+        process.stdout.write(JSON.stringify({ totalTokens }));
+        return;
+      }
+    }
+  } catch (_) {}
+})();
+`;
+
+const transcriptProbeStr = JSON.stringify(TRANSCRIPT_PROBE);
+
 // 已知模型的 context window 大小（tokens）
 // 当非官方 API 不返回 modelUsage 时，根据模型名称匹配此表作为 fallback
 const MODEL_CONTEXT_WINDOWS = {
