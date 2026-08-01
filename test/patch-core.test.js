@@ -210,7 +210,7 @@ test("idle session with zero usage applies transcript fallback once", async () =
     exec(command, args) {
       calls.push({ command, args });
       return Promise.resolve({
-        stdout: command === "node" ? '{"totalTokens":77000}' : "",
+        stdout: command === "node" ? '{"kind":"usage","totalTokens":77000}' : "",
       });
     },
   };
@@ -266,11 +266,165 @@ test("busy completion applies current generation and ignores stale results", asy
   render(jsx, sess, browserWindow, () => 1, immediateTimeout);
   assert.equal(pending.length, 6);
 
-  pending[0]({ stdout: '{"totalTokens":40000}' });
-  pending[3]({ stdout: '{"totalTokens":80000}' });
+  pending[0]({ stdout: '{"kind":"usage","totalTokens":40000}' });
+  pending[3]({ stdout: '{"kind":"usage","totalTokens":80000}' });
   await flushPromises();
 
   assert.equal(sess.usageData.value.totalTokens, 80000);
+});
+
+test("compact result lowers usage and preserves other usage fields", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  sess.usageData.current = {
+    contextWindow: 200000,
+    totalTokens: 83146,
+    totalCost: 1.25,
+    maxOutputTokens: 32000,
+    extra: "keep",
+  };
+  sess.connection.value = {
+    exec: (command) => Promise.resolve({
+      stdout: command === "node"
+        ? '{"kind":"compact","totalTokens":6750}'
+        : "",
+    }),
+  };
+  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.busy.value = false;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  await flushPromises();
+
+  assert.deepEqual(sess.usageData.value, {
+    contextWindow: 200000,
+    totalTokens: 6750,
+    totalCost: 1.25,
+    maxOutputTokens: 32000,
+    extra: "keep",
+  });
+  assert.equal(sess.__ccLastT, 6750);
+});
+
+test("zero compact result clears cache only for that assignment", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  sess.connection.value = {
+    exec: (command) => Promise.resolve({
+      stdout: command === "node"
+        ? '{"kind":"compact","totalTokens":0}'
+        : "",
+    }),
+  };
+  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.busy.value = false;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  await flushPromises();
+
+  assert.equal(sess.usageData.value.totalTokens, 0);
+  assert.equal(sess.__ccLastT, 0);
+
+  sess.usageData.value = { contextWindow: 200000, totalTokens: 900, totalCost: 0 };
+  sess.usageData.value = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
+  assert.equal(sess.usageData.value.totalTokens, 900);
+  assert.equal(sess.__ccLastT, 900);
+});
+
+test("session change clears usage caches and accepts clear reset", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+
+  render(jsx, sess, browserWindow, () => 1, () => 1);
+  const previousGeneration = sess.__ccProbeGen || 0;
+  sess.sessionId.value = "session-2";
+  sess.usageData.value = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
+
+  assert.equal(sess.usageData.value.totalTokens, 0);
+  assert.equal(sess.usageData.value.contextWindow, 200000);
+  assert.equal(sess.__ccLastT, 0);
+  assert.equal(sess.__ccLastCW, 0);
+  assert.ok(sess.__ccProbeGen > previousGeneration);
+});
+
+test("first session id assignment keeps valid first usage", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  sess.sessionId.value = "";
+  sess.usageData.current = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
+  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+
+  render(jsx, sess, browserWindow, () => 1, () => 1);
+  sess.sessionId.value = "session-1";
+  sess.usageData.value = { contextWindow: 0, totalTokens: 1200, totalCost: 0 };
+
+  assert.equal(sess.usageData.value.totalTokens, 1200);
+  assert.equal(sess.__ccLastT, 1200);
+});
+
+test("old transcript result cannot restore usage after session clear", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const pending = [];
+  sess.connection.value = {
+    exec(command) {
+      if (command !== "node") return Promise.resolve({ stdout: "" });
+      return new Promise((resolve) => pending.push(resolve));
+    },
+  };
+  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.busy.value = false;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  assert.equal(pending.length, 3);
+
+  sess.sessionId.value = "session-2";
+  sess.usageData.value = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
+  pending[0]({ stdout: '{"kind":"usage","totalTokens":80000}' });
+  await flushPromises();
+
+  assert.equal(sess.usageData.value.totalTokens, 0);
+  assert.equal(sess.__ccLastT, 0);
 });
 
 test("invalid transcript probe output leaves usage unchanged", async () => {

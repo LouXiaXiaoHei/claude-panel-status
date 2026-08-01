@@ -226,6 +226,8 @@ const chip = (jsx, sess) => `,(function(){` +
   `var __initial=__sig.value||{};` +
   `__ss.__ccLastCW=__initial.contextWindow>0?__initial.contextWindow:0;` +
   `__ss.__ccLastT=__initial.totalTokens>0?__initial.totalTokens:0;` +
+  `__ss.__ccUsageSid=(__ss.sessionId&&__ss.sessionId.value)||"";` +
+  `__ss.__ccAllowZeroOnce=false;` +
   `__ss.__ccSetCount=0;` +
   // 获取原始 descriptor
   `var __desc=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(__sig),"value")||Object.getOwnPropertyDescriptor(__sig,"value");` +
@@ -237,6 +239,13 @@ const chip = (jsx, sess) => `,(function(){` +
   `set:function(v){` +
   // ★ 在调用原始 setter 之前修复 contextWindow 和 totalTokens
   `if(v&&typeof v==="object"){` +
+  // session 切换表示 /clear 或新会话；先清除旧 session 的 usage 缓存
+  `var sidNow=(__ss.sessionId&&__ss.sessionId.value)||"";` +
+  `var sidChanged=!!__ss.__ccUsageSid&&sidNow!==__ss.__ccUsageSid;` +
+  `if(sidNow!==__ss.__ccUsageSid)__ss.__ccUsageSid=sidNow;` +
+  `if(sidChanged){__ss.__ccLastT=0;__ss.__ccLastCW=0;__ss.__ccProbeGen=(__ss.__ccProbeGen||0)+1;}` +
+  `var allowZero=sidChanged||__ss.__ccAllowZeroOnce===true;` +
+  `__ss.__ccAllowZeroOnce=false;` +
   // 修复 contextWindow
   `var apiCW=v.contextWindow||0;` +
   `if(apiCW>0)__ss.__ccLastCW=apiCW;` +
@@ -250,6 +259,7 @@ const chip = (jsx, sess) => `,(function(){` +
   `var apiT=v.totalTokens||0;` +
   `__ss.__ccSetCount++;` +
   `if(apiT>0)__ss.__ccLastT=apiT;` +
+  `else if(allowZero)__ss.__ccLastT=0;` +
   `else if(__ss.__ccLastT>0)v.totalTokens=__ss.__ccLastT;` +
   `}` +
   // 再调用原始 setter（此时 v 已修复，React 渲染读到的是正确值）
@@ -270,15 +280,19 @@ const chip = (jsx, sess) => `,(function(){` +
   `cn.exec("node",["-e",__TP,sid,cwd]).then(function(r){` +
   `if(__ss.__ccProbeGen!==gen||((__ss.sessionId&&__ss.sessionId.value)||"")!==sid)return;` +
   `var raw=(r&&r.stdout||"").trim(),data;try{data=JSON.parse(raw)}catch(_){return}` +
-  `if(!data||!(data.totalTokens>0))return;` +
+  `var isUsage=data&&data.kind==="usage"&&typeof data.totalTokens==="number"&&Number.isFinite(data.totalTokens)&&data.totalTokens>0;` +
+  `var isCompact=data&&data.kind==="compact"&&typeof data.totalTokens==="number"&&Number.isFinite(data.totalTokens)&&data.totalTokens>=0;` +
+  `if(!isUsage&&!isCompact)return;` +
   `var current=__ss.usageData.value||{};` +
-  `if(current.totalTokens!==data.totalTokens)__ss.usageData.value=Object.assign({},current,{totalTokens:data.totalTokens});` +
+  `if(isCompact&&data.totalTokens===0)__ss.__ccAllowZeroOnce=true;` +
+  `if(current.totalTokens!==data.totalTokens||__ss.__ccAllowZeroOnce)__ss.usageData.value=Object.assign({},current,{totalTokens:data.totalTokens});` +
   `}).catch(function(){})` +
   `}catch(_){}},delay)}` +
   `function __scheduleProbe(){if(!__sid||!__cwd)return;` +
   `var gen=(__ss.__ccProbeGen||0)+1;__ss.__ccProbeGen=gen;` +
   `__runProbe(gen,__sid,__cwd,0);__runProbe(gen,__sid,__cwd,300);__runProbe(gen,__sid,__cwd,1000)}` +
   `if(__ss.__ccProbeSid!==__sid){` +
+  `if(__ss.__ccProbeSid)__ss.__ccProbeGen=(__ss.__ccProbeGen||0)+1;` +
   `__ss.__ccProbeSid=__sid;__ss.__ccWasBusy=__busy;` +
   `if(__sid&&!__busy&&!(__ss.__ccLastT>0))__scheduleProbe();` +
   `}else{` +
