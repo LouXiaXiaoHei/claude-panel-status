@@ -184,6 +184,8 @@ const chip = (jsx, sess) => `,(function(){` +
   // 模型 context window fallback 表（注入到 webview 运行时）
   // 当非官方 API 不返回 modelUsage 时，根据当前模型名称查表获取 contextWindow
   `var __CW=${modelTableStr};` +
+  // Host-side transcript probe used when the live webview usage store stays at zero.
+  `var __TP=${transcriptProbeStr};` +
   // 每次渲染都绑定 session；setter 只安装一次，但调试状态需要在后续渲染中继续读取
   `var __ss=${sess};` +
   // 模糊匹配函数：支持部分模型名匹配（如 "claude-fable-5-20260731" 匹配 "claude-fable-5"）
@@ -232,6 +234,32 @@ const chip = (jsx, sess) => `,(function(){` +
   `});` +
   `}` +
   `__ss.__ccCWFixed=true;}` +
+  // Reconcile usage from the session transcript once at idle startup (only when empty)
+  // and after each busy -> idle transition. Generation checks discard stale RPC results.
+  `var __sid=(__ss.sessionId&&__ss.sessionId.value)||"",` +
+  `__cwd=(__ss.cwd&&__ss.cwd.value)||"",` +
+  `__busy=!!(__ss.busy&&__ss.busy.value);` +
+  `function __runProbe(gen,sid,cwd,delay){setTimeout(function(){try{` +
+  `if(__ss.__ccProbeGen!==gen)return;` +
+  `var cn=__ss.connection&&__ss.connection.value;if(!cn||!cn.exec)return;` +
+  `cn.exec("node",["-e",__TP,sid,cwd]).then(function(r){` +
+  `if(__ss.__ccProbeGen!==gen||((__ss.sessionId&&__ss.sessionId.value)||"")!==sid)return;` +
+  `var raw=(r&&r.stdout||"").trim(),data;try{data=JSON.parse(raw)}catch(_){return}` +
+  `if(!data||!(data.totalTokens>0))return;` +
+  `var current=__ss.usageData.value||{};` +
+  `if(current.totalTokens!==data.totalTokens)__ss.usageData.value=Object.assign({},current,{totalTokens:data.totalTokens});` +
+  `}).catch(function(){})` +
+  `}catch(_){}},delay)}` +
+  `function __scheduleProbe(){if(!__sid||!__cwd)return;` +
+  `var gen=(__ss.__ccProbeGen||0)+1;__ss.__ccProbeGen=gen;` +
+  `__runProbe(gen,__sid,__cwd,0);__runProbe(gen,__sid,__cwd,300);__runProbe(gen,__sid,__cwd,1000)}` +
+  `if(__ss.__ccProbeSid!==__sid){` +
+  `__ss.__ccProbeSid=__sid;__ss.__ccWasBusy=__busy;` +
+  `if(__sid&&!__busy&&!(__ss.__ccLastT>0))__scheduleProbe();` +
+  `}else{` +
+  `if(__ss.__ccWasBusy&&!__busy&&__sid)__scheduleProbe();` +
+  `__ss.__ccWasBusy=__busy;` +
+  `}` +
   // live branch detection: poll `git symbolic-ref` via the host's exec RPC and feed the
   // session's own gitBranch signal, so the chip (and session list) update on branch switch.
   // One interval per session store; the webview dies with the panel, so no cleanup needed.

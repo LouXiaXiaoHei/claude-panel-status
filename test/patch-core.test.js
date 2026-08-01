@@ -103,6 +103,11 @@ test("transcript probe ignores invalid session ids", () => {
   assert.equal(runProbe([], { sessionId: "../escape" }), "");
 });
 
+async function flushPromises() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function makeSession() {
   const signalPrototype = {};
   Object.defineProperty(signalPrototype, "value", {
@@ -114,6 +119,10 @@ function makeSession() {
   usageData.current = { contextWindow: 200000, totalTokens: 1000, totalCost: 0 };
   return {
     usageData,
+    sessionId: { value: "session-1" },
+    cwd: { value: "/tmp/probe-project" },
+    busy: { value: false },
+    connection: { value: null },
     currentMainLoopModel: { value: "claude-sonnet-4-8" },
     gitBranch: { value: "main" },
     worktree: { value: null },
@@ -123,6 +132,118 @@ function makeSession() {
     thinkingLevel: { value: "off" },
   };
 }
+
+test("idle session with zero usage applies transcript fallback once", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  sess.usageData.current = {
+    contextWindow: 200000,
+    totalTokens: 0,
+    totalCost: 1.25,
+    maxOutputTokens: 32000,
+    extra: "keep",
+  };
+  const calls = [];
+  sess.connection.value = {
+    exec(command, args) {
+      calls.push({ command, args });
+      return Promise.resolve({
+        stdout: command === "node" ? '{"totalTokens":77000}' : "",
+      });
+    },
+  };
+
+  render(jsx, sess, { __ccStatus: { customCW: () => 0 } }, () => 1, (fn) => fn());
+  await flushPromises();
+
+  const nodeCalls = calls.filter((call) => call.command === "node");
+  assert.equal(nodeCalls.length, 3);
+  assert.deepEqual(nodeCalls[0].args.slice(0, 2), ["-e", loadInternals().TRANSCRIPT_PROBE]);
+  assert.deepEqual(nodeCalls[0].args.slice(2), ["session-1", "/tmp/probe-project"]);
+  assert.deepEqual(sess.usageData.value, {
+    contextWindow: 200000,
+    totalTokens: 77000,
+    totalCost: 1.25,
+    maxOutputTokens: 32000,
+    extra: "keep",
+  });
+
+  render(jsx, sess, { __ccStatus: { customCW: () => 0 } }, () => 1, (fn) => fn());
+  await flushPromises();
+  assert.equal(calls.filter((call) => call.command === "node").length, 3);
+});
+
+test("busy completion applies current generation and ignores stale results", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const pending = [];
+  sess.connection.value = {
+    exec(command) {
+      if (command !== "node") return Promise.resolve({ stdout: "" });
+      return new Promise((resolve) => pending.push(resolve));
+    },
+  };
+  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.busy.value = false;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  assert.equal(pending.length, 3);
+
+  sess.busy.value = true;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.busy.value = false;
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  assert.equal(pending.length, 6);
+
+  pending[0]({ stdout: '{"totalTokens":40000}' });
+  pending[3]({ stdout: '{"totalTokens":80000}' });
+  await flushPromises();
+
+  assert.equal(sess.usageData.value.totalTokens, 80000);
+});
+
+test("invalid transcript probe output leaves usage unchanged", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  sess.usageData.current.totalTokens = 0;
+  sess.connection.value = {
+    exec: (command) => Promise.resolve({
+      stdout: command === "node" ? "not-json" : "",
+    }),
+  };
+
+  render(
+    jsx,
+    sess,
+    { __ccStatus: { customCW: () => 0 } },
+    () => 1,
+    (fn) => fn(),
+  );
+  await flushPromises();
+
+  assert.equal(sess.usageData.value.totalTokens, 0);
+});
 
 test("existing usage seeds cache before a later zero reset", () => {
   const chip = loadChip();
