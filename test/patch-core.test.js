@@ -673,6 +673,104 @@ test("busy start prevents prior transcript probes from replacing new live contex
   assert.equal(sess.usageData.value.totalTokens, 1000);
 });
 
+test("clear invalidates a pending stream refresh timer", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const timers = [];
+  const fakeTimeout = (fn) => {
+    timers.push(fn);
+    return timers.length;
+  };
+
+  render(
+    jsx,
+    sess,
+    { __cpStatus: { customCW: () => 0 } },
+    () => 1,
+    fakeTimeout,
+  );
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "message_start", message: { usage: { input_tokens: 70000 } } },
+  });
+  assert.equal(timers.length, 1);
+
+  sess.processMessage({
+    type: "system",
+    subtype: "init",
+    session_id: "session-2",
+  });
+  timers[0]();
+
+  assert.equal(sess.__cpLiveActive, false);
+  assert.equal(sess.__cpLiveT, 0);
+  assert.equal(sess.usageData.value.totalTokens, 0);
+});
+
+test("transcript fallback works without processMessage", async () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const sess = makeSession();
+  delete sess.processMessage;
+  sess.usageData.current = { contextWindow: 200000, totalTokens: 0, totalCost: 0 };
+  sess.connection.value = {
+    exec: (command) => Promise.resolve({
+      stdout: command === "node"
+        ? '{"kind":"usage","totalTokens":77000}'
+        : "",
+    }),
+  };
+
+  assert.doesNotThrow(() => render(
+    (type, props) => ({ type, props }),
+    sess,
+    { __cpStatus: { customCW: () => 0 } },
+    () => 1,
+    (fn) => fn(),
+  ));
+  await flushPromises();
+
+  assert.equal(sess.usageData.value.totalTokens, 77000);
+  assert.equal(sess.__cpStreamHooked, undefined);
+});
+
+test("stream wrapper preserves original processMessage errors", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const sess = makeSession();
+  const originalError = new Error("original failure");
+  sess.processMessage = function () {
+    throw originalError;
+  };
+
+  render(
+    (type, props) => ({ type, props }),
+    sess,
+    { __cpStatus: { customCW: () => 0 } },
+    () => 1,
+    (fn) => fn(),
+  );
+
+  assert.throws(
+    () => sess.processMessage({ type: "stream_event", event: { type: "message_start" } }),
+    (error) => error === originalError,
+  );
+});
+
 test("idle session with zero usage applies transcript fallback once", async () => {
   const chip = loadChip();
   const expression = chip("jsx", "sess").slice(1);
