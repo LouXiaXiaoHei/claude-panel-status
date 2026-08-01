@@ -270,6 +270,59 @@ const chip = (jsx, sess) => `,(function(){` +
   `});` +
   `}` +
   `__ss.__cpCWFixed=true;}` +
+  // Live context usage from Claude's root stream events. Estimated values stay separate from
+  // confirmed usage so ordinary zero-value protection and transcript reconciliation remain exact.
+  `function __cpNum(v){return typeof v==="number"&&Number.isFinite(v)&&v>=0?v:void 0}` +
+  `function __cpUtf8Length(v){var s=typeof v==="string"?v:"",n=0,i,c,d;` +
+  `for(i=0;i<s.length;i++){c=s.charCodeAt(i);` +
+  `if(c<128)n+=1;else if(c<2048)n+=2;` +
+  `else if(c>=55296&&c<=56319&&i+1<s.length&&(d=s.charCodeAt(i+1))>=56320&&d<=57343){n+=4;i++}` +
+  `else n+=3}return n}` +
+  `__ss.__cpClearStreamFn=function(clearLive){` +
+  `__ss.__cpStreamGen=(__ss.__cpStreamGen||0)+1;` +
+  `if(__ss.__cpStreamTimer)clearTimeout(__ss.__cpStreamTimer);` +
+  `__ss.__cpStreamTimer=0;__ss.__cpStreamBase=0;__ss.__cpStreamBytes=0;` +
+  `__ss.__cpStreamOutput=void 0;__ss.__cpStreamFloorOutput=0;` +
+  `if(clearLive){__ss.__cpLiveT=0;__ss.__cpLiveActive=false}` +
+  `};` +
+  `__ss.__cpPublishLiveFn=function(){` +
+  `var gen=__ss.__cpStreamGen||0,now=Date.now(),last=__ss.__cpStreamLastEmit||0,delay=Math.max(0,100-(now-last));` +
+  `if(__ss.__cpStreamTimer)return;` +
+  `__ss.__cpStreamTimer=setTimeout(function(){` +
+  `__ss.__cpStreamTimer=0;if((__ss.__cpStreamGen||0)!==gen)return;` +
+  `var estimated=Math.ceil((__ss.__cpStreamBytes||0)/3),output=__ss.__cpStreamOutput;` +
+  `if(!(typeof output==="number"&&Number.isFinite(output)&&output>=0))output=estimated;` +
+  `output=Math.max(output,__ss.__cpStreamFloorOutput||0);__ss.__cpStreamFloorOutput=output;` +
+  `__ss.__cpLiveT=Math.max(0,(__ss.__cpStreamBase||0)+output);__ss.__cpLiveActive=true;` +
+  `__ss.__cpStreamLastEmit=Date.now();` +
+  `var current=__ss.usageData&&__ss.usageData.value;` +
+  `if(current)__ss.usageData.value=Object.assign({},current);` +
+  `},delay);` +
+  `};` +
+  `if(!__ss.__cpStreamHooked&&typeof __ss.processMessage==="function"){` +
+  `var __origProcessMessage=__ss.processMessage;` +
+  `__ss.processMessage=function(event){` +
+  `try{if(event&&event.type==="stream_event"&&!event.parent_tool_use_id){` +
+  `var inner=event.event||{};` +
+  `if(inner.type==="message_start"){` +
+  `__ss.__cpClearStreamFn(false);` +
+  `var usage=inner.message&&inner.message.usage,input=usage&&__cpNum(usage.input_tokens),` +
+  `created=usage&&__cpNum(usage.cache_creation_input_tokens),read=usage&&__cpNum(usage.cache_read_input_tokens),` +
+  `hasBase=input!==void 0||created!==void 0||read!==void 0;` +
+  `__ss.__cpStreamBase=hasBase?(input||0)+(created||0)+(read||0):(__ss.__cpLastT||((__ss.usageData.value||{}).totalTokens||0));` +
+  `__ss.__cpStreamBytes=0;var initialOutput=usage&&__cpNum(usage.output_tokens);` +
+  `__ss.__cpStreamFloorOutput=initialOutput||0;__ss.__cpStreamOutput=void 0;__ss.__cpPublishLiveFn();` +
+  `}else if(inner.type==="message_delta"){` +
+  `var output=inner.usage&&__cpNum(inner.usage.output_tokens);if(output!==void 0)__ss.__cpStreamOutput=output;` +
+  `__ss.__cpPublishLiveFn();` +
+  `}else if(inner.type==="content_block_delta"){` +
+  `var delta=inner.delta||{},chunk=delta.type==="text_delta"?delta.text:delta.type==="thinking_delta"?delta.thinking:delta.type==="input_json_delta"?delta.partial_json:"";` +
+  `__ss.__cpStreamBytes=(__ss.__cpStreamBytes||0)+__cpUtf8Length(chunk);` +
+  `if(__ss.__cpStreamOutput===void 0)__ss.__cpPublishLiveFn();` +
+  `}` +
+  `}}catch(_){}` +
+  `return __origProcessMessage.apply(this,arguments);` +
+  `};__ss.__cpStreamHooked=true;}` +
   // Reconcile usage from the session transcript once at idle startup (only when empty)
   // and after each busy -> idle transition. Generation checks discard stale RPC results.
   `var __sid=(__ss.sessionId&&__ss.sessionId.value)||"",` +
@@ -329,7 +382,8 @@ const chip = (jsx, sess) => `,(function(){` +
   `TH=(${sess}.thinkingLevel&&${sess}.thinkingLevel.value)||"",` +
   // contextWindow 优先级：用户自定义 > API 返回 > fallback 表 > 默认 200k
   `CW=window.__cpStatus?window.__cpStatus.customCW():0,` +
-  `W=CW||U.contextWindow||__lookupCW(Mv)||200000,T=U.totalTokens||0,CO=U.totalCost||0;` +
+  `W=CW||U.contextWindow||__lookupCW(Mv)||200000,` +
+  `T=__ss.__cpLiveActive&&typeof __ss.__cpLiveT==="number"?__ss.__cpLiveT:(U.totalTokens||0),CO=U.totalCost||0;` +
   `var P=W>0?Math.round(Math.min(T/W*100,100)):0,` +
   `F=function(n){return n>=1e6?(n/1e6).toFixed(1).replace(/\\.0$/,"")+"M":n>=1e3?Math.round(n/1e3)+"k":""+n};` +
   // "claude-opus-4-8" -> "Opus 4.8", "claude-fable-5" -> "Fable 5" (date-stamp segments dropped)

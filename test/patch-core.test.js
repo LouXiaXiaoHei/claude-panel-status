@@ -173,8 +173,14 @@ function makeSession() {
   });
   const usageData = Object.create(signalPrototype);
   usageData.current = { contextWindow: 200000, totalTokens: 1000, totalCost: 0 };
+  const processedMessages = [];
   return {
     usageData,
+    processedMessages,
+    processMessage(event) {
+      processedMessages.push({ event, receiver: this });
+      return "original-result";
+    },
     sessionId: { value: "session-1" },
     cwd: { value: "/tmp/probe-project" },
     busy: { value: false },
@@ -188,6 +194,167 @@ function makeSession() {
     thinkingLevel: { value: "off" },
   };
 }
+
+function contextPill(result) {
+  return result.props.children.find(
+    (child) => child.props && child.props["data-seg"] === "ctx",
+  );
+}
+
+test("stream usage updates context while preserving confirmed cache", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  const startResult = sess.processMessage({
+    type: "stream_event",
+    parent_tool_use_id: null,
+    event: {
+      type: "message_start",
+      message: {
+        usage: {
+          input_tokens: 70000,
+          cache_creation_input_tokens: 1000,
+          cache_read_input_tokens: 2000,
+          output_tokens: 0,
+        },
+      },
+    },
+  });
+  sess.processMessage({
+    type: "stream_event",
+    parent_tool_use_id: null,
+    event: { type: "message_delta", usage: { output_tokens: 4000 } },
+  });
+  sess.processMessage({
+    type: "stream_event",
+    parent_tool_use_id: "tool-1",
+    event: {
+      type: "message_start",
+      message: { usage: { input_tokens: 999999, output_tokens: 0 } },
+    },
+  });
+  const result = render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+
+  assert.equal(startResult, "original-result");
+  assert.equal(sess.processedMessages.length, 3);
+  assert.equal(sess.processedMessages[0].receiver, sess);
+  assert.equal(sess.__cpLiveT, 77000);
+  assert.equal(sess.__cpLiveActive, true);
+  assert.equal(sess.__cpLastT, 1000);
+  assert.match(contextPill(result).props.title, /^77k\/200k \(39%\)/);
+});
+
+test("stream UTF-8 fallback estimates output and a new message_start replaces its base", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
+  const immediateTimeout = (fn) => fn();
+
+  render(jsx, sess, browserWindow, () => 1, immediateTimeout);
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "message_start", message: {} },
+  });
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "content_block_delta", delta: { type: "text_delta", text: "abc" } },
+  });
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "content_block_delta", delta: { type: "thinking_delta", thinking: "你" } },
+  });
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "content_block_delta", delta: { type: "input_json_delta", partial_json: "{}" } },
+  });
+
+  assert.equal(sess.__cpLiveT, 1003);
+  assert.equal(sess.__cpLastT, 1000);
+
+  sess.processMessage({
+    type: "stream_event",
+    event: {
+      type: "message_start",
+      message: {
+        usage: {
+          input_tokens: 90000,
+          cache_creation_input_tokens: 1000,
+          cache_read_input_tokens: 4000,
+          output_tokens: 0,
+        },
+      },
+    },
+  });
+  sess.processMessage({
+    type: "stream_event",
+    event: { type: "message_delta", usage: { output_tokens: 500 } },
+  });
+
+  assert.equal(sess.__cpLiveT, 95500);
+  assert.equal(sess.__cpLastT, 1000);
+});
+
+test("stream refresh throttle coalesces deltas within 100ms", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval", "setTimeout",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const timers = [];
+  const fakeTimeout = (fn, delay) => {
+    timers.push({ fn, delay });
+    return timers.length;
+  };
+  const originalNow = Date.now;
+  let now = 1000;
+  Date.now = () => now;
+
+  try {
+    render(
+      jsx,
+      sess,
+      { __cpStatus: { customCW: () => 0 } },
+      () => 1,
+      fakeTimeout,
+    );
+    sess.processMessage({
+      type: "stream_event",
+      event: { type: "message_start", message: {} },
+    });
+    for (const text of ["abc", "def", "ghi"]) {
+      sess.processMessage({
+        type: "stream_event",
+        event: { type: "content_block_delta", delta: { type: "text_delta", text } },
+      });
+    }
+
+    assert.equal(timers.length, 1);
+    now += 100;
+    timers.shift().fn();
+    assert.equal(sess.__cpLiveT, 1003);
+    assert.equal(sess.__cpLastT, 1000);
+  } finally {
+    Date.now = originalNow;
+  }
+});
 
 test("idle session with zero usage applies transcript fallback once", async () => {
   const chip = loadChip();
