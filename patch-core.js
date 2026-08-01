@@ -41,6 +41,31 @@ const TRANSCRIPT_PROBE = String.raw`
       if (!lines[index]) continue;
       let entry;
       try { entry = JSON.parse(lines[index]); } catch { continue; }
+      if (entry.type === "system" && entry.subtype === "compact_boundary") {
+        const metadata = entry.compactMetadata;
+        let totalTokens;
+        if (
+          metadata
+          && typeof metadata.postTokens === "number"
+          && Number.isFinite(metadata.postTokens)
+          && metadata.postTokens >= 0
+        ) {
+          totalTokens = metadata.postTokens;
+        } else if (
+          metadata
+          && typeof metadata.preTokens === "number"
+          && Number.isFinite(metadata.preTokens)
+          && typeof metadata.cumulativeDroppedTokens === "number"
+          && Number.isFinite(metadata.cumulativeDroppedTokens)
+        ) {
+          totalTokens = Math.max(0, metadata.preTokens - metadata.cumulativeDroppedTokens);
+        }
+        if (totalTokens !== undefined) {
+          process.stdout.write(JSON.stringify({ kind: "compact", totalTokens }));
+          return;
+        }
+        return;
+      }
       if (entry.type !== "assistant" || entry.isSidechain) continue;
       const message = entry.message;
       if (!message || message.role !== "assistant" || message.model === "<synthetic>" || !message.usage) continue;
@@ -50,7 +75,7 @@ const TRANSCRIPT_PROBE = String.raw`
         + num(usage.cache_read_input_tokens)
         + num(usage.output_tokens);
       if (totalTokens > 0) {
-        process.stdout.write(JSON.stringify({ totalTokens }));
+        process.stdout.write(JSON.stringify({ kind: "usage", totalTokens }));
         return;
       }
     }

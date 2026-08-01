@@ -96,7 +96,63 @@ test("transcript probe returns latest main assistant context tokens", () => {
     },
   ]);
 
-  assert.deepEqual(JSON.parse(stdout), { totalTokens: 77000 });
+  assert.deepEqual(JSON.parse(stdout), { kind: "usage", totalTokens: 77000 });
+});
+
+test("transcript probe prefers compact postTokens over older assistant usage", () => {
+  const stdout = runProbe([
+    {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        model: "xopglm51",
+        usage: { input_tokens: 80000, output_tokens: 3146 },
+      },
+    },
+    {
+      type: "system",
+      subtype: "compact_boundary",
+      compactMetadata: {
+        preTokens: 83146,
+        postTokens: 6750,
+        cumulativeDroppedTokens: 76396,
+      },
+    },
+  ]);
+
+  assert.deepEqual(JSON.parse(stdout), { kind: "compact", totalTokens: 6750 });
+});
+
+test("transcript probe derives compact tokens when postTokens is absent", () => {
+  const stdout = runProbe([
+    {
+      type: "system",
+      subtype: "compact_boundary",
+      compactMetadata: { preTokens: 83146, cumulativeDroppedTokens: 76396 },
+    },
+  ]);
+
+  assert.deepEqual(JSON.parse(stdout), { kind: "compact", totalTokens: 6750 });
+});
+
+test("transcript probe prefers newer assistant usage after compact", () => {
+  const stdout = runProbe([
+    {
+      type: "system",
+      subtype: "compact_boundary",
+      compactMetadata: { postTokens: 6750 },
+    },
+    {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        model: "xopglm51",
+        usage: { input_tokens: 7000, output_tokens: 500 },
+      },
+    },
+  ]);
+
+  assert.deepEqual(JSON.parse(stdout), { kind: "usage", totalTokens: 7500 });
 });
 
 test("transcript probe ignores invalid session ids", () => {
