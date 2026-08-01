@@ -157,7 +157,10 @@ const chip = (jsx, sess) => `,(function(){` +
   // 在调用原始 setter 之前修复值，这样 React 渲染时读到的就是正确的数据
   `if(!__ss.__ccCWFixed){` +
   `var __sig=__ss.usageData;` +
-  `__ss.__ccLastCW=0;__ss.__ccLastT=0;__ss.__ccSetCount=0;` +
+  `var __initial=__sig.value||{};` +
+  `__ss.__ccLastCW=__initial.contextWindow>0?__initial.contextWindow:0;` +
+  `__ss.__ccLastT=__initial.totalTokens>0?__initial.totalTokens:0;` +
+  `__ss.__ccSetCount=0;` +
   // 获取原始 descriptor
   `var __desc=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(__sig),"value")||Object.getOwnPropertyDescriptor(__sig,"value");` +
   `if(__desc&&__desc.set){` +

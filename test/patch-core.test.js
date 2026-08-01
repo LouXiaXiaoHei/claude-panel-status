@@ -43,6 +43,34 @@ function makeSession() {
   };
 }
 
+test("existing usage seeds cache before a later zero reset", () => {
+  const chip = loadChip();
+  const expression = chip("jsx", "sess").slice(1);
+  const render = new Function(
+    "jsx", "sess", "window", "setInterval",
+    `return (${expression});`,
+  );
+  const jsx = (type, props) => ({ type, props });
+  const sess = makeSession();
+  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+
+  render(jsx, sess, browserWindow, () => 1);
+  assert.equal(sess.__ccLastT, 1000);
+  assert.equal(sess.__ccLastCW, 200000);
+  assert.equal(sess.__ccSetCount, 0);
+
+  sess.usageData.value = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
+  const second = render(jsx, sess, browserWindow, () => 1);
+  const contextPill = second.props.children.find(
+    (child) => child.props && child.props["data-seg"] === "ctx",
+  );
+
+  assert.equal(sess.usageData.value.totalTokens, 1000);
+  assert.equal(sess.usageData.value.contextWindow, 200000);
+  assert.equal(sess.__ccSetCount, 1);
+  assert.match(contextPill.props.title, /^1k\/200k \(1%\) \[set:1\|lastT:1000\]$/);
+});
+
 test("debug state survives later chip renders and setter count accumulates", () => {
   const chip = loadChip();
   const expression = chip("jsx", "sess").slice(1);
