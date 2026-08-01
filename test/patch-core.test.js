@@ -29,7 +29,7 @@ function loadChip() {
 }
 
 function runProbe(entries, { sessionId = "session-1", cwd = "/tmp/probe-project" } = {}) {
-  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-status-probe-"));
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "cp-status-probe-"));
   const projectDir = path.join(
     configDir,
     "projects",
@@ -215,7 +215,7 @@ test("idle session with zero usage applies transcript fallback once", async () =
     },
   };
 
-  render(jsx, sess, { __ccStatus: { customCW: () => 0 } }, () => 1, (fn) => fn());
+  render(jsx, sess, { __cpStatus: { customCW: () => 0 } }, () => 1, (fn) => fn());
   await flushPromises();
 
   const nodeCalls = calls.filter((call) => call.command === "node");
@@ -230,7 +230,7 @@ test("idle session with zero usage applies transcript fallback once", async () =
     extra: "keep",
   });
 
-  render(jsx, sess, { __ccStatus: { customCW: () => 0 } }, () => 1, (fn) => fn());
+  render(jsx, sess, { __cpStatus: { customCW: () => 0 } }, () => 1, (fn) => fn());
   await flushPromises();
   assert.equal(calls.filter((call) => call.command === "node").length, 3);
 });
@@ -251,7 +251,7 @@ test("busy completion applies current generation and ignores stale results", asy
       return new Promise((resolve) => pending.push(resolve));
     },
   };
-  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
   const immediateTimeout = (fn) => fn();
 
   sess.busy.value = true;
@@ -296,7 +296,7 @@ test("compact result lowers usage and preserves other usage fields", async () =>
         : "",
     }),
   };
-  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
   const immediateTimeout = (fn) => fn();
 
   sess.busy.value = true;
@@ -312,7 +312,7 @@ test("compact result lowers usage and preserves other usage fields", async () =>
     maxOutputTokens: 32000,
     extra: "keep",
   });
-  assert.equal(sess.__ccLastT, 6750);
+  assert.equal(sess.__cpLastT, 6750);
 });
 
 test("zero compact result clears cache only for that assignment", async () => {
@@ -331,7 +331,7 @@ test("zero compact result clears cache only for that assignment", async () => {
         : "",
     }),
   };
-  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
   const immediateTimeout = (fn) => fn();
 
   sess.busy.value = true;
@@ -341,12 +341,12 @@ test("zero compact result clears cache only for that assignment", async () => {
   await flushPromises();
 
   assert.equal(sess.usageData.value.totalTokens, 0);
-  assert.equal(sess.__ccLastT, 0);
+  assert.equal(sess.__cpLastT, 0);
 
   sess.usageData.value = { contextWindow: 200000, totalTokens: 900, totalCost: 0 };
   sess.usageData.value = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
   assert.equal(sess.usageData.value.totalTokens, 900);
-  assert.equal(sess.__ccLastT, 900);
+  assert.equal(sess.__cpLastT, 900);
 });
 
 test("session change clears usage caches and accepts clear reset", () => {
@@ -358,18 +358,18 @@ test("session change clears usage caches and accepts clear reset", () => {
   );
   const jsx = (type, props) => ({ type, props });
   const sess = makeSession();
-  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
 
   render(jsx, sess, browserWindow, () => 1, () => 1);
-  const previousGeneration = sess.__ccProbeGen || 0;
+  const previousGeneration = sess.__cpProbeGen || 0;
   sess.sessionId.value = "session-2";
   sess.usageData.value = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
 
   assert.equal(sess.usageData.value.totalTokens, 0);
   assert.equal(sess.usageData.value.contextWindow, 200000);
-  assert.equal(sess.__ccLastT, 0);
-  assert.equal(sess.__ccLastCW, 0);
-  assert.ok(sess.__ccProbeGen > previousGeneration);
+  assert.equal(sess.__cpLastT, 0);
+  assert.equal(sess.__cpLastCW, 0);
+  assert.ok(sess.__cpProbeGen > previousGeneration);
 });
 
 test("first session id assignment keeps valid first usage", () => {
@@ -383,14 +383,14 @@ test("first session id assignment keeps valid first usage", () => {
   const sess = makeSession();
   sess.sessionId.value = "";
   sess.usageData.current = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
-  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
 
   render(jsx, sess, browserWindow, () => 1, () => 1);
   sess.sessionId.value = "session-1";
   sess.usageData.value = { contextWindow: 0, totalTokens: 1200, totalCost: 0 };
 
   assert.equal(sess.usageData.value.totalTokens, 1200);
-  assert.equal(sess.__ccLastT, 1200);
+  assert.equal(sess.__cpLastT, 1200);
 });
 
 test("old transcript result cannot restore usage after session clear", async () => {
@@ -409,7 +409,7 @@ test("old transcript result cannot restore usage after session clear", async () 
       return new Promise((resolve) => pending.push(resolve));
     },
   };
-  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
   const immediateTimeout = (fn) => fn();
 
   sess.busy.value = true;
@@ -424,7 +424,7 @@ test("old transcript result cannot restore usage after session clear", async () 
   await flushPromises();
 
   assert.equal(sess.usageData.value.totalTokens, 0);
-  assert.equal(sess.__ccLastT, 0);
+  assert.equal(sess.__cpLastT, 0);
 });
 
 test("invalid transcript probe output leaves usage unchanged", async () => {
@@ -446,7 +446,7 @@ test("invalid transcript probe output leaves usage unchanged", async () => {
   render(
     jsx,
     sess,
-    { __ccStatus: { customCW: () => 0 } },
+    { __cpStatus: { customCW: () => 0 } },
     () => 1,
     (fn) => fn(),
   );
@@ -464,12 +464,12 @@ test("existing usage seeds cache before a later zero reset", () => {
   );
   const jsx = (type, props) => ({ type, props });
   const sess = makeSession();
-  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
 
   render(jsx, sess, browserWindow, () => 1);
-  assert.equal(sess.__ccLastT, 1000);
-  assert.equal(sess.__ccLastCW, 200000);
-  assert.equal(sess.__ccSetCount, 0);
+  assert.equal(sess.__cpLastT, 1000);
+  assert.equal(sess.__cpLastCW, 200000);
+  assert.equal(sess.__cpSetCount, 0);
 
   sess.usageData.value = { contextWindow: 0, totalTokens: 0, totalCost: 0 };
   const second = render(jsx, sess, browserWindow, () => 1);
@@ -479,7 +479,7 @@ test("existing usage seeds cache before a later zero reset", () => {
 
   assert.equal(sess.usageData.value.totalTokens, 1000);
   assert.equal(sess.usageData.value.contextWindow, 200000);
-  assert.equal(sess.__ccSetCount, 1);
+  assert.equal(sess.__cpSetCount, 1);
   assert.match(contextPill.props.title, /^1k\/200k \(1%\) \[set:1\|lastT:1000\]$/);
 });
 
@@ -492,10 +492,10 @@ test("debug state survives later chip renders and setter count accumulates", () 
   );
   const jsx = (type, props) => ({ type, props });
   const sess = makeSession();
-  const browserWindow = { __ccStatus: { customCW: () => 0 } };
+  const browserWindow = { __cpStatus: { customCW: () => 0 } };
 
   render(jsx, sess, browserWindow, () => 1);
-  assert.equal(sess.__ccSetCount, 0);
+  assert.equal(sess.__cpSetCount, 0);
 
   sess.usageData.value = { contextWindow: 0, totalTokens: 1200, totalCost: 0 };
   const second = render(jsx, sess, browserWindow, () => 1);
@@ -503,8 +503,8 @@ test("debug state survives later chip renders and setter count accumulates", () 
     (child) => child.props && child.props["data-seg"] === "ctx",
   );
 
-  assert.equal(sess.__ccSetCount, 1);
-  assert.equal(sess.__ccLastT, 1200);
+  assert.equal(sess.__cpSetCount, 1);
+  assert.equal(sess.__cpLastT, 1200);
   assert.match(contextPill.props.title, /\[set:1\|lastT:1200\]$/);
 });
 
@@ -517,12 +517,12 @@ test("missing debug fields fall back to zero", () => {
   );
   const jsx = (type, props) => ({ type, props });
   const sess = makeSession();
-  sess.__ccCWFixed = true;
+  sess.__cpCWFixed = true;
 
   const result = render(
     jsx,
     sess,
-    { __ccStatus: { customCW: () => 0 } },
+    { __cpStatus: { customCW: () => 0 } },
     () => 1,
   );
   const contextPill = result.props.children.find(
