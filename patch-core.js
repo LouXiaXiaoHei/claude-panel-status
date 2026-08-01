@@ -4,19 +4,19 @@
 // Segments render as theme-aware colored pills (--vscode-charts-* variables + color-mix backgrounds);
 // the context pill's background fills proportionally to usage. The gear opens a popup with per-segment
 // show/hide toggles and transcript-only zoom +/- controls; preferences persist in the webview's
-// localStorage ("cc-status-prefs").
+// localStorage ("cp-status-prefs").
 // Idempotent: re-run any time; it no-ops when the current extension version is already patched.
-// A backup of the original bundle is kept next to it as index.js.cc-status.bak.
+// A backup of the original bundle is kept next to it as index.js.cp-status.bak.
 //
 // Used two ways:
-//   CLI:    node patch-claude-vscode-status.js          (SessionStart hook does this)
-//   module: require(...).run()                          (the cc-status-patcher companion VSCode
+//   CLI:    node patch-claude-vscode-panel.js          (SessionStart hook does this)
+//   module: require(...).run()                          (the cp-status-patcher companion VSCode
 //                                                        extension calls this on startup + every 60s)
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const MARKER = "cc-status-chip";
+const MARKER = "cp-status-panel";
 // Default transcript zoom when the user hasn't picked one from the gear menu yet. 1 = off.
 // (Gear-menu changes persist in the webview's localStorage and override this default.)
 const ZOOM = 1.15;
@@ -141,28 +141,29 @@ const re = /(\w+)\((\w+),\{usedTokens:(\w+)\.usageData\.value\.totalTokens,conte
 // ---------------------------------------------------------------------------
 const runtime = [
   ';(function(){try{',
-  'var K="cc-status-prefs";',
+  'var K="cp-status-prefs";',
+  'var _op=localStorage.getItem("cc-status-prefs");if(_op&&!localStorage.getItem(K)){localStorage.setItem(K,_op);localStorage.removeItem("cc-status-prefs")}',
   'function load(){try{return JSON.parse(localStorage.getItem(K))||{}}catch(_){return{}}}',
   'function save(p){try{localStorage.setItem(K,JSON.stringify(p))}catch(_){}}',
   'function styleEl(id){var el=document.getElementById(id);if(!el){el=document.createElement("style");el.id=id;(document.head||document.documentElement).appendChild(el)}return el}',
   // [key, menu label, dot color] — dot colors mirror the chip pill colors
   'var SEGS=[["model","Model","var(--vscode-charts-blue,#4fc1ff)"],["branch","Branch","var(--vscode-charts-purple,#b180d7)"],["ctx","Context usage","var(--vscode-charts-green,#89d185)"],["effort","Effort","var(--vscode-charts-yellow,#cca700)"],["think","Thinking","var(--vscode-charts-orange,#d18616)"],["cost","Cost","var(--vscode-charts-yellow,#cca700)"]];',
-  'var api=window.__ccStatus={};',
+  'var api=window.__cpStatus={};',
   'api.prefs=load();',
   `api.zoom=function(){var z=api.prefs.zoom;return typeof z==="number"&&z>=0.8&&z<=1.6?z:${ZOOM}};`,
   // 获取用户自定义的 context window 大小（优先级最高）
   'api.customCW=function(){var v=api.prefs.customCW;return typeof v==="number"&&v>0?v:0};',
   // zoom the conversation text only — not the header or the input box. The hash suffix of
   // messagesContainer_<hash> changes per build, so match on the stable semantic prefix.
-  'api.applyZoom=function(){styleEl("cc-zoom").textContent=api.zoom()===1?"":"[class*=messagesContainer_]{zoom:"+api.zoom()+"}"};',
-  'api.applyCss=function(){var css="";for(var i=0;i<SEGS.length;i++){var k=SEGS[i][0];if(api.prefs[k]===false)css+=".cc-status-chip [data-seg="+k+"]{display:none}"}styleEl("cc-status-style").textContent=css};',
+  'api.applyZoom=function(){styleEl("cp-zoom").textContent=api.zoom()===1?"":"[class*=messagesContainer_]{zoom:"+api.zoom()+"}"};',
+  'api.applyCss=function(){var css="";for(var i=0;i<SEGS.length;i++){var k=SEGS[i][0];if(api.prefs[k]===false)css+=".cp-status-panel [data-seg="+k+"]{display:none}"}styleEl("cp-status-style").textContent=css};',
   'api.set=function(k,v){api.prefs[k]=v;save(api.prefs);api.applyCss()};',
   'api.setZoom=function(z){api.prefs.zoom=z;save(api.prefs);api.applyZoom()};',
   'api.setCustomCW=function(v){var n=parseInt(v,10);api.prefs.customCW=isNaN(n)||n<=0?0:n;save(api.prefs)};',
   'api.openMenu=function(ev){',
-  'var old=document.getElementById("cc-status-menu");if(old){old.remove();return}',
+  'var old=document.getElementById("cp-status-menu");if(old){old.remove();return}',
   'var btn=ev&&ev.currentTarget;',
-  'var mnu=document.createElement("div");mnu.id="cc-status-menu";',
+  'var mnu=document.createElement("div");mnu.id="cp-status-menu";',
   'mnu.style.cssText="position:fixed;z-index:100000;min-width:220px;padding:10px;border-radius:10px;font-size:12px;direction:ltr;background:var(--vscode-editorWidget-background,#252526);color:var(--vscode-foreground,#ccc);border:1px solid var(--vscode-widget-border,#454545);box-shadow:0 6px 24px rgba(0,0,0,.4)";',
   'var h=document.createElement("div");h.textContent="Status bar";h.style.cssText="font-weight:600;margin:0 6px 6px;opacity:.75;font-size:11px;text-transform:uppercase;letter-spacing:.4px";mnu.appendChild(h);',
   'SEGS.forEach(function(s){var lab=document.createElement("label");',
@@ -183,7 +184,7 @@ const runtime = [
   'var zr=document.createElement("div");zr.style.cssText="display:flex;align-items:center;gap:8px;margin:8px 6px 0;padding-top:10px;border-top:1px solid var(--vscode-widget-border,#454545)";',
   'var zl=document.createElement("span");zl.textContent="Zoom";zl.style.cssText="opacity:.75;flex:1";zr.appendChild(zl);',
   'var zv=document.createElement("span");zv.style.cssText="min-width:40px;text-align:center;font-variant-numeric:tabular-nums";',
-  'function zb(t,d){var b=document.createElement("button");b.type="button";b.className="cc-zbtn";b.textContent=t;b.title=d>0?"Zoom in":"Zoom out";b.onclick=function(){var nz=Math.round(Math.min(1.6,Math.max(0.8,api.zoom()+d))*100)/100;api.setZoom(nz);zv.textContent=Math.round(nz*100)+"%"};return b}',
+  'function zb(t,d){var b=document.createElement("button");b.type="button";b.className="cp-zbtn";b.textContent=t;b.title=d>0?"Zoom in":"Zoom out";b.onclick=function(){var nz=Math.round(Math.min(1.6,Math.max(0.8,api.zoom()+d))*100)/100;api.setZoom(nz);zv.textContent=Math.round(nz*100)+"%"};return b}',
   'zv.textContent=Math.round(api.zoom()*100)+"%";',
   'zr.appendChild(zb("-",-0.05));zr.appendChild(zv);zr.appendChild(zb("+",0.05));mnu.appendChild(zr);',
   'document.body.appendChild(mnu);',
@@ -195,7 +196,7 @@ const runtime = [
   'setTimeout(function(){function close(e2){if(!mnu.contains(e2.target)){mnu.remove();document.removeEventListener("mousedown",close)}}document.addEventListener("mousedown",close)},0);',
   '};',
   // static styles: menu rows/hover, themed checkboxes, zoom buttons, gear hover spin
-  'styleEl("cc-menu-style").textContent="#cc-status-menu label{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:5px;cursor:pointer}#cc-status-menu label:hover{background:var(--vscode-list-hoverBackground,rgba(128,128,128,.12))}#cc-status-menu input[type=checkbox]{accent-color:var(--vscode-button-background,#0e639c);margin:0}#cc-status-menu input[type=number]{outline:none}#cc-status-menu input[type=number]:focus{border-color:var(--vscode-focusBorder,#007fd4)}#cc-status-menu .cc-zbtn{width:24px;height:24px;cursor:pointer;border-radius:5px;border:1px solid var(--vscode-widget-border,#454545);background:var(--vscode-button-secondaryBackground,#3a3d41);color:inherit;font-size:13px;line-height:1}#cc-status-menu .cc-zbtn:hover{background:var(--vscode-button-secondaryHoverBackground,#45494e)}.cc-status-chip .cc-gear{transition:transform .15s ease,opacity .15s ease}.cc-status-chip .cc-gear:hover{opacity:1;transform:rotate(45deg)}";',
+  'styleEl("cp-menu-style").textContent="#cp-status-menu label{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:5px;cursor:pointer}#cp-status-menu label:hover{background:var(--vscode-list-hoverBackground,rgba(128,128,128,.12))}#cp-status-menu input[type=checkbox]{accent-color:var(--vscode-button-background,#0e639c);margin:0}#cp-status-menu input[type=number]{outline:none}#cp-status-menu input[type=number]:focus{border-color:var(--vscode-focusBorder,#007fd4)}#cp-status-menu .cp-zbtn{width:24px;height:24px;cursor:pointer;border-radius:5px;border:1px solid var(--vscode-widget-border,#454545);background:var(--vscode-button-secondaryBackground,#3a3d41);color:inherit;font-size:13px;line-height:1}#cp-status-menu .cp-zbtn:hover{background:var(--vscode-button-secondaryHoverBackground,#45494e)}.cp-status-panel .cp-gear{transition:transform .15s ease,opacity .15s ease}.cp-status-panel .cp-gear:hover{opacity:1;transform:rotate(45deg)}";',
   'api.applyZoom();api.applyCss();',
   '}catch(_){}})();',
 ].join("\n");
@@ -221,14 +222,14 @@ const chip = (jsx, sess) => `,(function(){` +
   // Preact signal 的 value 是通过 Object.defineProperty 定义的 getter/setter
   // 非官方 API 在某些事件中会把 contextWindow 或 totalTokens 重置为 0
   // 在调用原始 setter 之前修复值，这样 React 渲染时读到的就是正确的数据
-  `if(!__ss.__ccCWFixed){` +
+  `if(!__ss.__cpCWFixed){` +
   `var __sig=__ss.usageData;` +
   `var __initial=__sig.value||{};` +
-  `__ss.__ccLastCW=__initial.contextWindow>0?__initial.contextWindow:0;` +
-  `__ss.__ccLastT=__initial.totalTokens>0?__initial.totalTokens:0;` +
-  `__ss.__ccUsageSid=(__ss.sessionId&&__ss.sessionId.value)||"";` +
-  `__ss.__ccAllowZeroOnce=false;` +
-  `__ss.__ccSetCount=0;` +
+  `__ss.__cpLastCW=__initial.contextWindow>0?__initial.contextWindow:0;` +
+  `__ss.__cpLastT=__initial.totalTokens>0?__initial.totalTokens:0;` +
+  `__ss.__cpUsageSid=(__ss.sessionId&&__ss.sessionId.value)||"";` +
+  `__ss.__cpAllowZeroOnce=false;` +
+  `__ss.__cpSetCount=0;` +
   // 获取原始 descriptor
   `var __desc=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(__sig),"value")||Object.getOwnPropertyDescriptor(__sig,"value");` +
   `if(__desc&&__desc.set){` +
@@ -241,26 +242,26 @@ const chip = (jsx, sess) => `,(function(){` +
   `if(v&&typeof v==="object"){` +
   // session 切换表示 /clear 或新会话；先清除旧 session 的 usage 缓存
   `var sidNow=(__ss.sessionId&&__ss.sessionId.value)||"";` +
-  `var sidChanged=!!__ss.__ccUsageSid&&sidNow!==__ss.__ccUsageSid;` +
-  `if(sidNow!==__ss.__ccUsageSid)__ss.__ccUsageSid=sidNow;` +
-  `if(sidChanged){__ss.__ccLastT=0;__ss.__ccLastCW=0;__ss.__ccProbeGen=(__ss.__ccProbeGen||0)+1;}` +
-  `var allowZero=sidChanged||__ss.__ccAllowZeroOnce===true;` +
-  `__ss.__ccAllowZeroOnce=false;` +
+  `var sidChanged=!!__ss.__cpUsageSid&&sidNow!==__ss.__cpUsageSid;` +
+  `if(sidNow!==__ss.__cpUsageSid)__ss.__cpUsageSid=sidNow;` +
+  `if(sidChanged){__ss.__cpLastT=0;__ss.__cpLastCW=0;__ss.__cpProbeGen=(__ss.__cpProbeGen||0)+1;}` +
+  `var allowZero=sidChanged||__ss.__cpAllowZeroOnce===true;` +
+  `__ss.__cpAllowZeroOnce=false;` +
   // 修复 contextWindow
   `var apiCW=v.contextWindow||0;` +
-  `if(apiCW>0)__ss.__ccLastCW=apiCW;` +
+  `if(apiCW>0)__ss.__cpLastCW=apiCW;` +
   `var Mv=(__ss.currentMainLoopModel&&__ss.currentMainLoopModel.value)||"";` +
-  `var CW=window.__ccStatus?window.__ccStatus.customCW():0;` +
-  `var fixedCW=CW||__ss.__ccLastCW||__lookupCW(Mv)||200000;` +
+  `var CW=window.__cpStatus?window.__cpStatus.customCW():0;` +
+  `var fixedCW=CW||__ss.__cpLastCW||__lookupCW(Mv)||200000;` +
   `if(!v.contextWindow||v.contextWindow===0){` +
   `v.contextWindow=fixedCW;` +
   `}` +
   // 修复 totalTokens：缓存上一次有效值，当新值为 0 时使用缓存
   `var apiT=v.totalTokens||0;` +
-  `__ss.__ccSetCount++;` +
-  `if(apiT>0)__ss.__ccLastT=apiT;` +
-  `else if(allowZero)__ss.__ccLastT=0;` +
-  `else if(__ss.__ccLastT>0)v.totalTokens=__ss.__ccLastT;` +
+  `__ss.__cpSetCount++;` +
+  `if(apiT>0)__ss.__cpLastT=apiT;` +
+  `else if(allowZero)__ss.__cpLastT=0;` +
+  `else if(__ss.__cpLastT>0)v.totalTokens=__ss.__cpLastT;` +
   `}` +
   // 再调用原始 setter（此时 v 已修复，React 渲染读到的是正确值）
   `__origSet.call(this,v);` +
@@ -268,47 +269,47 @@ const chip = (jsx, sess) => `,(function(){` +
   `configurable:true` +
   `});` +
   `}` +
-  `__ss.__ccCWFixed=true;}` +
+  `__ss.__cpCWFixed=true;}` +
   // Reconcile usage from the session transcript once at idle startup (only when empty)
   // and after each busy -> idle transition. Generation checks discard stale RPC results.
   `var __sid=(__ss.sessionId&&__ss.sessionId.value)||"",` +
   `__cwd=(__ss.cwd&&__ss.cwd.value)||"",` +
   `__busy=!!(__ss.busy&&__ss.busy.value);` +
   `function __runProbe(gen,sid,cwd,delay){setTimeout(function(){try{` +
-  `if(__ss.__ccProbeGen!==gen)return;` +
+  `if(__ss.__cpProbeGen!==gen)return;` +
   `var cn=__ss.connection&&__ss.connection.value;if(!cn||!cn.exec)return;` +
   `cn.exec("node",["-e",__TP,sid,cwd]).then(function(r){` +
-  `if(__ss.__ccProbeGen!==gen||((__ss.sessionId&&__ss.sessionId.value)||"")!==sid)return;` +
+  `if(__ss.__cpProbeGen!==gen||((__ss.sessionId&&__ss.sessionId.value)||"")!==sid)return;` +
   `var raw=(r&&r.stdout||"").trim(),data;try{data=JSON.parse(raw)}catch(_){return}` +
   `var isUsage=data&&data.kind==="usage"&&typeof data.totalTokens==="number"&&Number.isFinite(data.totalTokens)&&data.totalTokens>0;` +
   `var isCompact=data&&data.kind==="compact"&&typeof data.totalTokens==="number"&&Number.isFinite(data.totalTokens)&&data.totalTokens>=0;` +
   `if(!isUsage&&!isCompact)return;` +
   `var current=__ss.usageData.value||{};` +
-  `if(isCompact&&data.totalTokens===0)__ss.__ccAllowZeroOnce=true;` +
-  `if(current.totalTokens!==data.totalTokens||__ss.__ccAllowZeroOnce)__ss.usageData.value=Object.assign({},current,{totalTokens:data.totalTokens});` +
+  `if(isCompact&&data.totalTokens===0)__ss.__cpAllowZeroOnce=true;` +
+  `if(current.totalTokens!==data.totalTokens||__ss.__cpAllowZeroOnce)__ss.usageData.value=Object.assign({},current,{totalTokens:data.totalTokens});` +
   `}).catch(function(){})` +
   `}catch(_){}},delay)}` +
   `function __scheduleProbe(){if(!__sid||!__cwd)return;` +
-  `var gen=(__ss.__ccProbeGen||0)+1;__ss.__ccProbeGen=gen;` +
+  `var gen=(__ss.__cpProbeGen||0)+1;__ss.__cpProbeGen=gen;` +
   `__runProbe(gen,__sid,__cwd,0);__runProbe(gen,__sid,__cwd,300);__runProbe(gen,__sid,__cwd,1000)}` +
-  `if(__ss.__ccProbeSid!==__sid){` +
-  `if(__ss.__ccProbeSid)__ss.__ccProbeGen=(__ss.__ccProbeGen||0)+1;` +
-  `__ss.__ccProbeSid=__sid;__ss.__ccWasBusy=__busy;` +
-  `if(__sid&&!__busy&&!(__ss.__ccLastT>0))__scheduleProbe();` +
+  `if(__ss.__cpProbeSid!==__sid){` +
+  `if(__ss.__cpProbeSid)__ss.__cpProbeGen=(__ss.__cpProbeGen||0)+1;` +
+  `__ss.__cpProbeSid=__sid;__ss.__cpWasBusy=__busy;` +
+  `if(__sid&&!__busy&&!(__ss.__cpLastT>0))__scheduleProbe();` +
   `}else{` +
-  `if(__ss.__ccWasBusy&&!__busy&&__sid)__scheduleProbe();` +
-  `__ss.__ccWasBusy=__busy;` +
+  `if(__ss.__cpWasBusy&&!__busy&&__sid)__scheduleProbe();` +
+  `__ss.__cpWasBusy=__busy;` +
   `}` +
   // live branch detection: poll `git symbolic-ref` via the host's exec RPC and feed the
   // session's own gitBranch signal, so the chip (and session list) update on branch switch.
   // One interval per session store; the webview dies with the panel, so no cleanup needed.
-  `if(!${sess}.__ccBrPoll){var pf=function(){try{` +
+  `if(!${sess}.__cpBrPoll){var pf=function(){try{` +
   `var cn=${sess}.connection&&${sess}.connection.value;` +
   `if(cn&&cn.exec)cn.exec("git",["symbolic-ref","--short","HEAD"]).then(function(r){` +
   `var b=(r&&r.stdout||"").trim();` +
   `if(b&&${sess}.gitBranch&&${sess}.gitBranch.value!==b)${sess}.gitBranch.value=b` +
   `}).catch(function(){})` +
-  `}catch(_){}};pf();${sess}.__ccBrPoll=setInterval(pf,15000);}` +
+  `}catch(_){}};pf();${sess}.__cpBrPoll=setInterval(pf,15000);}` +
   // ---- React render：从 usageData 读取（已被拦截修复，contextWindow 不会为 0）----
   `var U=${sess}.usageData.value,` +
   `Mv=(${sess}.currentMainLoopModel&&${sess}.currentMainLoopModel.value)||"",` +
@@ -327,7 +328,7 @@ const chip = (jsx, sess) => `,(function(){` +
   // computed signal: thinkingLevelOverride ?? connection config thinkingLevel ?? "off"
   `TH=(${sess}.thinkingLevel&&${sess}.thinkingLevel.value)||"",` +
   // contextWindow 优先级：用户自定义 > API 返回 > fallback 表 > 默认 200k
-  `CW=window.__ccStatus?window.__ccStatus.customCW():0,` +
+  `CW=window.__cpStatus?window.__cpStatus.customCW():0,` +
   `W=CW||U.contextWindow||__lookupCW(Mv)||200000,T=U.totalTokens||0,CO=U.totalCost||0;` +
   `var P=W>0?Math.round(Math.min(T/W*100,100)):0,` +
   `F=function(n){return n>=1e6?(n/1e6).toFixed(1).replace(/\\.0$/,"")+"M":n>=1e3?Math.round(n/1e3)+"k":""+n};` +
@@ -358,11 +359,11 @@ const chip = (jsx, sess) => `,(function(){` +
   // title 属性显示详细 token 数，鼠标悬停可查看
   `if(s[0]==="ctx"&&W>0){st.background="linear-gradient(90deg, color-mix(in srgb, "+c+" 30%, transparent) "+P+"%, color-mix(in srgb, "+c+" 10%, transparent) "+P+"%)";s[1]+="\\u200B";}` + // ZWSP 作为 title 标记
   `var attrs={"data-seg":s[0],style:st,children:s[1]};` +
-  `if(s[0]==="ctx"&&W>0)attrs.title=F(T)+"/"+F(W)+" ("+P+"%) [set:"+(__ss.__ccSetCount||0)+"|lastT:"+(__ss.__ccLastT||0)+"]";` +
+  `if(s[0]==="ctx"&&W>0)attrs.title=F(T)+"/"+F(W)+" ("+P+"%) [set:"+(__ss.__cpSetCount||0)+"|lastT:"+(__ss.__cpLastT||0)+"]";` +
   `return ${jsx}("span",attrs)});` +
   // gear: always rendered so settings stay reachable even when every segment is hidden/empty
-  `kids.push(${jsx}("button",{type:"button",className:"cc-gear",title:"Status bar settings","aria-label":"Status bar settings",` +
-  `onClick:function(ev){if(window.__ccStatus)window.__ccStatus.openMenu(ev)},` +
+  `kids.push(${jsx}("button",{type:"button",className:"cp-gear",title:"Status bar settings","aria-label":"Status bar settings",` +
+  `onClick:function(ev){if(window.__cpStatus)window.__cpStatus.openMenu(ev)},` +
   `style:{cursor:"pointer",border:"none",background:"transparent",color:"inherit",fontSize:"13px",padding:"0 2px",opacity:"0.6",lineHeight:"1"},` +
   `children:"\\u2699"}));` +
   `return ${jsx}("span",{className:"${MARKER}",` +
@@ -372,15 +373,18 @@ const chip = (jsx, sess) => `,(function(){` +
 
 function run() {
   const ext = findExtension();
-  if (!ext) return { status: "none", message: "cc-status: Claude Code VSCode extension not found — nothing to patch" };
+  if (!ext) return { status: "none", message: "cp-status: Claude Code VSCode extension not found — nothing to patch" };
   let src = fs.readFileSync(ext.file, "utf8");
-  if (src.includes(MARKER)) return { status: "already", file: ext.file, message: "cc-status: already patched — " + ext.file };
+  if (src.includes(MARKER)) return { status: "already", file: ext.file, message: "cp-status: already patched — " + ext.file };
   const m = src.match(re);
   if (!m) return {
     status: "anchor-missing", file: ext.file,
-    message: "cc-status: anchor not found in " + ext.file + " — the extension bundle changed; the patch needs updating for this version.",
+    message: "cp-status: anchor not found in " + ext.file + " — the extension bundle changed; the patch needs updating for this version.",
   };
-  const bak = ext.file + ".cc-status.bak";
+  // 迁移旧版备份文件
+  const oldBak = ext.file + ".cc-status.bak";
+  const bak = ext.file + ".cp-status.bak";
+  if (fs.existsSync(oldBak) && !fs.existsSync(bak)) fs.renameSync(oldBak, bak);
   if (!fs.existsSync(bak)) fs.copyFileSync(ext.file, bak);
   src = src.replace(re, (whole, jsx, _comp, sess) => whole + chip(jsx, sess));
   // leading \n in case the bundle ends with a // comment (e.g. sourceMappingURL)
@@ -388,7 +392,7 @@ function run() {
   fs.writeFileSync(ext.file, src);
   return {
     status: "patched", file: ext.file,
-    message: "cc-status: patched " + ext.file + " (backup: " + path.basename(bak) + "). Reload the VSCode window to see it.",
+    message: "cp-status: patched " + ext.file + " (backup: " + path.basename(bak) + "). Reload the VSCode window to see it.",
   };
 }
 
