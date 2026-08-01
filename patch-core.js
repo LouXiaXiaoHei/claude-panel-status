@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Injects an always-visible status chip (model · branch · context tokens/window (%) · effort · think · cost)
+// Injects an always-visible panel status indicator (model · branch · context tokens/window (%) · effort · think · cost)
 // plus a gear (settings) button into the Claude Code VSCode extension's input toolbar (webview).
 // Segments render as theme-aware colored pills (--vscode-charts-* variables + color-mix backgrounds);
 // the context pill's background fills proportionally to usage. The gear opens a popup with per-segment
