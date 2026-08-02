@@ -99,10 +99,10 @@ Expected: the 32px result still separates the central chip, ring, and green poin
 - [ ] **Step 7: Run the existing automated tests**
 
 ```bash
-npm test
+node --test test/patch-core.test.js
 ```
 
-Expected: all tests pass with zero failures.
+Expected: 29 tests pass with zero failures.
 
 - [ ] **Step 8: Review the scoped diff and commit the asset replacement**
 
